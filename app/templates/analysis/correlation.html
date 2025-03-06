@@ -1,0 +1,256 @@
+{% extends 'base.html' %}
+
+{% block title %}Correlation Analysis - Health Data Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+    .source-section {
+        margin-bottom: 20px;
+    }
+    .metric-select {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="mb-0">Correlation Analysis</h2>
+            </div>
+            <div class="card-body">
+                <p class="lead">
+                    Discover relationships between any two health metrics. Select two metrics below and analyze
+                    how they correlate over time.
+                </p>
+                
+                <form id="correlationForm" method="post" action="{{ url_for('analysis.correlation') }}">
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-secondary text-white">
+                                    <h4 class="mb-0">First Metric</h4>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="metric1Source" class="form-label">Data Source:</label>
+                                        <select class="form-select" id="metric1Source" name="metric1_source" required>
+                                            <option value="">-- Select Source --</option>
+                                            {% for source_name, metrics in sources.items() %}
+                                                <option value="{{ source_name }}">{{ source_name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="metric1Name" class="form-label">Metric:</label>
+                                        <select class="form-select" id="metric1Name" name="metric1_name" required>
+                                            <option value="">-- Select Metric --</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <!-- Hidden container for all metrics by source -->
+                                    <div id="metric1Options" style="display: none;">
+                                        {% for source_name, metrics in sources.items() %}
+                                            <div data-source="{{ source_name }}">
+                                                {% for metric in metrics %}
+                                                    <option value="{{ metric.metric_name }}" data-count="{{ metric.count }}">
+                                                        {{ metric.metric_name }} ({{ metric.count }} datapoints)
+                                                    </option>
+                                                {% endfor %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-secondary text-white">
+                                    <h4 class="mb-0">Second Metric</h4>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="metric2Source" class="form-label">Data Source:</label>
+                                        <select class="form-select" id="metric2Source" name="metric2_source" required>
+                                            <option value="">-- Select Source --</option>
+                                            {% for source_name, metrics in sources.items() %}
+                                                <option value="{{ source_name }}">{{ source_name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="metric2Name" class="form-label">Metric:</label>
+                                        <select class="form-select" id="metric2Name" name="metric2_name" required>
+                                            <option value="">-- Select Metric --</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <!-- Hidden container for all metrics by source -->
+                                    <div id="metric2Options" style="display: none;">
+                                        {% for source_name, metrics in sources.items() %}
+                                            <div data-source="{{ source_name }}">
+                                                {% for metric in metrics %}
+                                                    <option value="{{ metric.metric_name }}" data-count="{{ metric.count }}">
+                                                        {{ metric.metric_name }} ({{ metric.count }} datapoints)
+                                                    </option>
+                                                {% endfor %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-info text-white">
+                                    <h4 class="mb-0">Date Range</h4>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="dateRange" class="form-label">Select Range:</label>
+                                        <select class="form-select" id="dateRange" name="date_range">
+                                            <option value="1month">Last Month</option>
+                                            <option value="3months">Last 3 Months</option>
+                                            <option value="6months">Last 6 Months</option>
+                                            <option value="1year">Last Year</option>
+                                            <option value="2years">Last 2 Years</option>
+                                            <option value="5years">Last 5 Years</option>
+                                            <option value="all" selected>All Time</option>
+                                            <option value="custom">Custom Range</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div id="customDateRange" style="display: none;">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="startDate" class="form-label">Start Date:</label>
+                                                    <input type="date" class="form-control" id="startDate" name="start_date">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label for="endDate" class="form-label">End Date:</label>
+                                                    <input type="date" class="form-control" id="endDate" name="end_date">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-info text-white">
+                                    <h4 class="mb-0">Correlation Options</h4>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="method" class="form-label">Correlation Method:</label>
+                                        <select class="form-select" id="method" name="method">
+                                            <option value="pearson" selected>Pearson (linear relationship)</option>
+                                            <option value="spearman">Spearman (monotonic relationship)</option>
+                                            <option value="kendall">Kendall (ordinal relationship)</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="handleMissing" class="form-label">Handle Missing Data:</label>
+                                        <select class="form-select" id="handleMissing" name="handle_missing">
+                                            <option value="drop" selected>Only analyze matching dates (recommended)</option>
+                                            <option value="interpolate">Use linear interpolation</option>
+                                            <option value="ffill">Forward fill (carry last value forward)</option>
+                                        </select>
+                                        <div class="form-text">
+                                            <i class="fas fa-info-circle"></i> The recommended option ensures correlations are only calculated 
+                                            on dates where both metrics have actual data.
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="timeShiftOura" name="time_shift_oura" value="yes" checked>
+                                            <label class="form-check-label" for="timeShiftOura">
+                                                Adjust Oura sleep metrics by 1 day
+                                            </label>
+                                            <div class="form-text">
+                                                <i class="fas fa-info-circle"></i> Shifts Oura sleep data back by 1 day to properly align with data during the day.
+                                                Sleep data (from Oura) recorded on a given day reflects the previous night's sleep, which would be affected by the previous day's food choices.
+                                                Activity and other non-sleep metrics are not time-shifted.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="useDensity" name="use_density" value="yes" checked>
+                                            <label class="form-check-label" for="useDensity">
+                                                Use nutrient density (per 100 calories)
+                                            </label>
+                                            <div class="form-text">
+                                                <i class="fas fa-info-circle"></i> Analyzes nutrients per 100 calories instead of absolute amounts.
+                                                This normalizes for total calorie intake and provides more accurate correlation with non-nutrition metrics.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="minPairs" class="form-label">Minimum Data Pairs:</label>
+                                        <input type="number" class="form-control" id="minPairs" name="min_pairs" value="10" min="3">
+                                        <div class="form-text">Minimum number of data points required to calculate correlation.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-calculator me-2"></i>Calculate Correlation
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Date range selection
+        $('#dateRange').change(function() {
+            if ($(this).val() === 'custom') {
+                $('#customDateRange').show();
+            } else {
+                $('#customDateRange').hide();
+            }
+        });
+        
+        // Metric 1 source selection
+        $('#metric1Source').change(function() {
+            const source = $(this).val();
+            const options = $('#metric1Options div[data-source="' + source + '"]').html();
+            $('#metric1Name').html('<option value="">-- Select Metric --</option>' + options);
+        });
+        
+        // Metric 2 source selection
+        $('#metric2Source').change(function() {
+            const source = $(this).val();
+            const options = $('#metric2Options div[data-source="' + source + '"]').html();
+            $('#metric2Name').html('<option value="">-- Select Metric --</option>' + options);
+        });
+    });
+</script>
+{% endblock %} 

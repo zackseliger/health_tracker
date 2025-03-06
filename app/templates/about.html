@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block title %}About - Health Data Tracker{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="mb-0">About Health Data Tracker</h2>
+            </div>
+            <div class="card-body">
+                <h4>What is Health Data Tracker?</h4>
+                <p>
+                    Health Data Tracker is a personal health analytics platform that brings together data from 
+                    different sources to help you discover correlations and insights about your health. 
+                    It combines data from Oura Ring, Chronometer nutrition tracking, and your own custom metrics
+                    to provide a comprehensive view of your health data.
+                </p>
+                
+                <h4 class="mt-4">Features</h4>
+                <ul class="list-group list-group-flush mb-4">
+                    <li class="list-group-item">
+                        <strong>Oura Ring Integration</strong> - Import sleep, HRV, respiratory rate, and other metrics from your Oura Ring
+                    </li>
+                    <li class="list-group-item">
+                        <strong>Chronometer Integration</strong> - Import nutrition data like vitamin intake, macronutrients, and more
+                    </li>
+                    <li class="list-group-item">
+                        <strong>Custom Metrics</strong> - Add your own health metrics like bloodwork results, symptoms, or any other data
+                    </li>
+                    <li class="list-group-item">
+                        <strong>Correlation Analysis</strong> - Find relationships between any two metrics in your health data
+                    </li>
+                    <li class="list-group-item">
+                        <strong>Interactive Dashboards</strong> - Visualize your health trends over time
+                    </li>
+                </ul>
+                
+                <h4 class="mt-4">How It Works</h4>
+                <p>
+                    Health Data Tracker standardizes data from different sources and stores it in a unified format.
+                    This allows for easy correlation analysis between any metrics, regardless of where they came from.
+                    The platform handles data with different frequencies (daily, weekly, monthly) and provides tools
+                    for visualization and analysis.
+                </p>
+                
+                <h4 class="mt-4">Getting Started</h4>
+                <p>
+                    To get started with Health Data Tracker:
+                </p>
+                <ol>
+                    <li class="mb-2">Import your health data from Oura Ring (API or CSV) or Chronometer (CSV)</li>
+                    <li class="mb-2">Define any custom metrics you want to track</li>
+                    <li class="mb-2">Enter values for your custom metrics</li>
+                    <li class="mb-2">Use the correlation tools to discover relationships in your data</li>
+                    <li class="mb-2">Set up your dashboard with your most important metrics</li>
+                </ol>
+                
+                <div class="d-flex justify-content-center mt-4">
+                    <a href="{{ url_for('data.import_data') }}" class="btn btn-lg btn-primary me-3">
+                        <i class="fas fa-file-import me-2"></i>Import Data
+                    </a>
+                    <a href="{{ url_for('data.custom_metrics') }}" class="btn btn-lg btn-success">
+                        <i class="fas fa-plus-circle me-2"></i>Add Custom Metrics
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h3 class="mb-0">Technical Information</h3>
+            </div>
+            <div class="card-body">
+                <p>
+                    Health Data Tracker is built using the following technologies:
+                </p>
+                <ul>
+                    <li><strong>Backend:</strong> Python with Flask</li>
+                    <li><strong>Database:</strong> SQLite (can be configured for PostgreSQL)</li>
+                    <li><strong>Frontend:</strong> HTML, CSS, JavaScript with Bootstrap</li>
+                    <li><strong>Data Analysis:</strong> Pandas, SciPy, and NumPy</li>
+                    <li><strong>Visualization:</strong> Chart.js</li>
+                </ul>
+                
+                <p class="mt-3">
+                    The application uses a standardized data model where each health metric is stored
+                    with its value, date, source, and other metadata. This allows for flexible querying
+                    and correlation analysis across different types of health data.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

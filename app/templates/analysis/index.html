@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block title %}Analysis - Health Data Tracker{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h1 class="mb-4">Analysis Tools</h1>
+    
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5>Quick Analysis</h5>
+                </div>
+                <div class="card-body">
+                    <p>View your health data through various analysis tools.</p>
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('analysis.dashboard') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+                        </a>
+                        <a href="{{ url_for('analysis.correlation') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-exchange-alt me-2"></i>Correlation Analysis
+                        </a>
+                        <a href="{{ url_for('analysis.correlation_table') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-table me-2"></i>Correlation Table
+                        </a>
+                        <a href="#" class="btn btn-outline-primary">
+                            <i class="fas fa-chart-line me-2"></i>Trend Analysis
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5>Custom Reports</h5>
+                </div>
+                <div class="card-body">
+                    <p>Create and view custom reports based on your health data.</p>
+                    <div class="d-grid gap-2">
+                        <a href="#" class="btn btn-outline-primary">
+                            <i class="fas fa-plus-circle me-2"></i>Create New Report
+                        </a>
+                        <a href="#" class="btn btn-outline-primary">
+                            <i class="fas fa-list me-2"></i>View Saved Reports
+                        </a>
+                        <a href="#" class="btn btn-outline-primary">
+                            <i class="fas fa-download me-2"></i>Export Data
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5>Available Metrics</h5>
+        </div>
+        <div class="card-body">
+            {% if sources %}
+                <div class="accordion" id="metricsAccordion">
+                    {% for source_name, metrics_list in sources.items() %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="heading{{ loop.index }}">
+                            <button class="accordion-button {% if not loop.first %}collapsed{% endif %}" type="button" 
+                                data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" 
+                                aria-expanded="{{ 'true' if loop.first else 'false' }}" aria-controls="collapse{{ loop.index }}">
+                                {{ source_name }} ({{ metrics_list|length }} metrics)
+                            </button>
+                        </h2>
+                        <div id="collapse{{ loop.index }}" class="accordion-collapse collapse {% if loop.first %}show{% endif %}" 
+                            aria-labelledby="heading{{ loop.index }}" data-bs-parent="#metricsAccordion">
+                            <div class="accordion-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Metric Name</th>
+                                                <th>Type</th>
+                                                <th>Unit</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for metric in metrics_list %}
+                                            <tr>
+                                                <td>{{ metric.metric_name }}</td>
+                                                <td>{{ metric.type }}</td>
+                                                <td>{{ metric.unit if metric.unit else 'N/A' }}</td>
+                                                <td>
+                                                    <div class="btn-group btn-group-sm">
+                                                        <a href="#" class="btn btn-outline-primary">
+                                                            <i class="fas fa-chart-line"></i>
+                                                        </a>
+                                                        <a href="#" class="btn btn-outline-primary">
+                                                            <i class="fas fa-info-circle"></i>
+                                                        </a>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    <h4>No metrics available</h4>
+                    <p>You need to import some health data first.</p>
+                    <a href="{{ url_for('data.import_data') }}" class="btn btn-primary">Import Data</a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,286 @@
+{% extends 'base.html' %}
+
+{% block title %}Browse Data - Health Data Tracker{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="my-4">Browse Health Data</h1>
+
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Filter Data</h5>
+                </div>
+                <div class="card-body">
+                    <form id="filterForm" method="get" action="{{ url_for('data.browse') }}">
+                        <div class="row">
+                            <div class="col-md-2 mb-3">
+                                <label for="source">Data Source</label>
+                                <select class="form-select" id="source" name="source" onchange="this.form.submit()">
+                                    <option value="">All Sources</option>
+                                    {% for source in sources %}
+                                        <option value="{{ source }}" {% if current_source == source %}selected{% endif %}>{{ source|capitalize }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="metric">Metric</label>
+                                <select class="form-select" id="metric" name="metric" onchange="this.form.submit()">
+                                    <option value="">All Metrics</option>
+                                    {% for metric in metrics %}
+                                        <option value="{{ metric }}" {% if current_metric == metric %}selected{% endif %}>{{ metric }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="max_calories">Max Calories: <span id="caloriesValue">{{ current_max_calories or 'No limit' }}</span></label>
+                                <div class="d-flex">
+                                    <input type="range" class="form-range flex-grow-1 me-2" id="max_calories" name="max_calories" 
+                                           min="{{ min_calories }}" max="{{ max_calories_bound }}" step="50" 
+                                           value="{{ current_max_calories or max_calories_bound }}">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="resetCalories">Reset</button>
+                                </div>
+                                <div class="form-text">
+                                    Shows data from days where calorie intake was below this value
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12 d-flex justify-content-between">
+                                <button type="submit" class="btn btn-primary">Apply Filters</button>
+                                <button type="button" class="btn btn-secondary" id="clearFilters">Clear Filters</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if data.items %}
+    <form id="bulkActionForm" method="post" action="{{ url_for('data.browse') }}">
+        <div class="row mb-3">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                        <div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="selectAll">
+                                <label class="form-check-label" for="selectAll">Select All</label>
+                            </div>
+                        </div>
+                        <div>
+                            <button type="submit" name="delete_selected" value="true" class="btn btn-danger" id="deleteSelectedBtn" disabled>
+                                <i class="fas fa-trash me-1"></i> Delete Selected
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width: 50px;">#</th>
+                                <th>Date</th>
+                                <th>Source</th>
+                                <th>Metric</th>
+                                <th>Value</th>
+                                <th>Units</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in data.items %}
+                            <tr>
+                                <td>
+                                    <div class="form-check">
+                                        <input class="form-check-input data-checkbox" type="checkbox" name="selected_data" value="{{ item.id }}" id="checkbox-{{ item.id }}">
+                                    </div>
+                                </td>
+                                <td>{{ item.date.strftime('%Y-%m-%d') }}</td>
+                                <td>
+                                    <span class="badge bg-{{ 'primary' if item.source == 'oura' else 'success' if item.source == 'chronometer' else 'info' }}">
+                                        {{ item.source }}
+                                    </span>
+                                </td>
+                                <td>{{ item.metric_name }}</td>
+                                <td class="fw-bold">{{ item.metric_value }}</td>
+                                <td>{{ item.metric_units }}</td>
+                                <td>
+                                    <a href="{{ url_for('data.date_view', date_str=item.date.strftime('%Y-%m-%d')) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-calendar-day"></i> View Day
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-single-btn" data-id="{{ item.id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <!-- Pagination -->
+    <nav aria-label="Data pagination" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if data.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('data.browse', page=data.prev_num, per_page=data.per_page, source=current_source, metric=current_metric, max_calories=current_max_calories, date=current_date) }}">Previous</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">Previous</span>
+                </li>
+            {% endif %}
+
+            {% for page_num in data.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                {% if page_num %}
+                    {% if page_num == data.page %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% else %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('data.browse', page=page_num, per_page=data.per_page, source=current_source, metric=current_metric, max_calories=current_max_calories, date=current_date) }}">{{ page_num }}</a>
+                        </li>
+                    {% endif %}
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if data.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('data.browse', page=data.next_num, per_page=data.per_page, source=current_source, metric=current_metric, max_calories=current_max_calories, date=current_date) }}">Next</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">Next</span>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% else %}
+    <div class="alert alert-info">
+        <h4 class="alert-heading">No data found</h4>
+        <p>No health data matches your current filter criteria. Try adjusting your filters or import some data first.</p>
+        <hr>
+        <a href="{{ url_for('data.import_data') }}" class="btn btn-primary">Import Data</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteConfirmModalLabel">Confirm Deletion</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this data point? This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteSingleForm" method="post" action="{{ url_for('data.delete_data') }}">
+                    <input type="hidden" name="data_id" id="deleteDataId" value="">
+                    <input type="hidden" name="redirect_url" value="{{ url_for('data.browse', page=data.page, per_page=data.per_page, source=current_source, metric=current_metric, max_calories=current_max_calories, date=current_date) }}">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Calories slider value display
+        const caloriesSlider = document.getElementById('max_calories');
+        const caloriesValue = document.getElementById('caloriesValue');
+        const resetCaloriesBtn = document.getElementById('resetCalories');
+        
+        if (caloriesSlider) {
+            caloriesSlider.addEventListener('input', function() {
+                caloriesValue.textContent = this.value;
+            });
+            
+            resetCaloriesBtn.addEventListener('click', function() {
+                caloriesSlider.value = '{{ max_calories_bound }}';
+                caloriesValue.textContent = 'No limit';
+                document.getElementById('filterForm').submit();
+            });
+        }
+        
+        // Clear filters button
+        document.getElementById('clearFilters').addEventListener('click', function() {
+            window.location.href = "{{ url_for('data.browse') }}";
+        });
+        
+        // Select all checkboxes
+        const selectAllCheckbox = document.getElementById('selectAll');
+        const dataCheckboxes = document.querySelectorAll('.data-checkbox');
+        const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+        
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                const isChecked = this.checked;
+                
+                dataCheckboxes.forEach(checkbox => {
+                    checkbox.checked = isChecked;
+                });
+                
+                updateDeleteButtonState();
+            });
+            
+            dataCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', updateDeleteButtonState);
+            });
+        }
+        
+        function updateDeleteButtonState() {
+            const checkedCount = document.querySelectorAll('.data-checkbox:checked').length;
+            deleteSelectedBtn.disabled = checkedCount === 0;
+            
+            // Update select all checkbox state
+            if (dataCheckboxes.length > 0) {
+                if (checkedCount === 0) {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = false;
+                } else if (checkedCount === dataCheckboxes.length) {
+                    selectAllCheckbox.checked = true;
+                    selectAllCheckbox.indeterminate = false;
+                } else {
+                    selectAllCheckbox.indeterminate = true;
+                }
+            }
+        }
+        
+        // Delete single item
+        const deleteButtons = document.querySelectorAll('.delete-single-btn');
+        const deleteDataIdInput = document.getElementById('deleteDataId');
+        const deleteModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+        
+        deleteButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const dataId = this.getAttribute('data-id');
+                deleteDataIdInput.value = dataId;
+                deleteModal.show();
+            });
+        });
+    });
+</script>
+{% endblock %} 

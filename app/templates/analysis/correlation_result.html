@@ -1,0 +1,508 @@
+{% extends 'base.html' %}
+
+{% block title %}Correlation Results - Health Data Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+    .correlation-strength-very-strong { color: #0056b3; font-weight: bold; }
+    .correlation-strength-strong { color: #007bff; }
+    .correlation-strength-moderate { color: #17a2b8; }
+    .correlation-strength-weak { color: #6c757d; }
+    .correlation-strength-negligible { color: #adb5bd; }
+    
+    .correlation-significance-high { font-weight: bold; }
+    .correlation-significance-moderate { font-style: italic; }
+    .correlation-significance-low { opacity: 0.8; }
+    
+    .data-point-row:nth-child(even) {
+        background-color: rgba(0,0,0,0.05);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-3">
+        <a href="{{ url_for('analysis.correlation') }}" class="btn btn-outline-primary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Correlation Analysis
+        </a>
+    </div>
+</div>
+
+{% if result and 'error' not in result %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h2 class="mb-0">Correlation Results</h2>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h4>Metrics Analyzed</h4>
+                        <p class="lead">
+                            <span class="fw-bold">{{ result.metric1.display }}</span> 
+                            vs 
+                            <span class="fw-bold">{{ result.metric2.display }}</span>
+                        </p>
+                    </div>
+                    <div class="text-end">
+                        <p class="mb-1">Date Range: 
+                            <span class="fw-bold">
+                                {% if form_data.date_range == 'all' %}
+                                    All Time
+                                {% elif form_data.date_range == 'custom' %}
+                                    {{ form_data.start_date }} to {{ form_data.end_date }}
+                                {% else %}
+                                    {{ form_data.date_range }}
+                                {% endif %}
+                            </span>
+                        </p>
+                        <p class="mb-0">Method: 
+                            <span class="fw-bold">
+                                {% if form_data.method == 'pearson' %}
+                                    Pearson (Linear)
+                                {% elif form_data.method == 'spearman' %}
+                                    Spearman (Rank Order)
+                                {% elif form_data.method == 'kendall' %}
+                                    Kendall (Rank Order)
+                                {% endif %}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row mt-4">
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h3 class="mb-3">Correlation Coefficient</h3>
+                                <div class="display-1 
+                                    {% if result.correlation.coefficient|abs >= 0.7 %}correlation-strength-very-strong
+                                    {% elif result.correlation.coefficient|abs >= 0.5 %}correlation-strength-strong
+                                    {% elif result.correlation.coefficient|abs >= 0.3 %}correlation-strength-moderate
+                                    {% elif result.correlation.coefficient|abs >= 0.1 %}correlation-strength-weak
+                                    {% else %}correlation-strength-negligible{% endif %}">
+                                    {{ "%.3f"|format(result.correlation.coefficient) }}
+                                </div>
+                                <p class="mt-2">
+                                    {% if result.correlation.coefficient > 0 %}
+                                        <i class="fas fa-arrow-up text-success me-1"></i>Positive Correlation
+                                    {% elif result.correlation.coefficient < 0 %}
+                                        <i class="fas fa-arrow-down text-danger me-1"></i>Negative Correlation
+                                    {% else %}
+                                        <i class="fas fa-minus text-secondary me-1"></i>No Correlation
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h3 class="mb-3">P-Value</h3>
+                                <div class="display-5 
+                                    {% if result.correlation.p_value < 0.001 %}correlation-significance-high
+                                    {% elif result.correlation.p_value < 0.05 %}correlation-significance-moderate
+                                    {% else %}correlation-significance-low{% endif %}">
+                                    {% if result.correlation.p_value < 0.001 %}
+                                        < 0.001
+                                    {% else %}
+                                        {{ "%.3f"|format(result.correlation.p_value) }}
+                                    {% endif %}
+                                </div>
+                                <p class="mt-2">
+                                    {% if result.correlation.p_value < 0.05 %}
+                                        <i class="fas fa-check-circle text-success me-1"></i>Statistically Significant
+                                    {% else %}
+                                        <i class="fas fa-exclamation-circle text-warning me-1"></i>Not Statistically Significant
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h3 class="mb-3">Data Points</h3>
+                                <div class="display-5">
+                                    {{ result.correlation.valid_pairs }}
+                                </div>
+                                <p class="mt-2">
+                                    <i class="fas fa-database me-1 text-primary"></i>Valid Data Pairs
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mt-4">
+                    <h5><i class="fas fa-info-circle me-2"></i>Interpretation</h5>
+                    <p class="mb-0">{{ result.correlation.interpretation }}</p>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="fas fa-database me-2"></i>Data Coverage Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <table class="table table-bordered">
+                                    <tr>
+                                        <th>Total Date Range:</th>
+                                        <td>{{ result.correlation.data_info.total_dates }} days</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Dates with Both Metrics:</th>
+                                        <td>{{ result.correlation.data_info.common_dates }} days</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Coverage:</th>
+                                        <td>{{ (result.correlation.data_info.common_dates / result.correlation.data_info.total_dates * 100)|round(1) }}%</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <table class="table table-bordered">
+                                    <tr>
+                                        <th>Missing "{{ result.metric1.display }}" Data:</th>
+                                        <td>{{ result.correlation.data_info.missing_metric1 }} days</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Missing "{{ result.metric2.display }}" Data:</th>
+                                        <td>{{ result.correlation.data_info.missing_metric2 }} days</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Missing Data Handling:</th>
+                                        <td>
+                                            {% if result.correlation.data_info.handling_method == 'drop' %}
+                                            <span class="badge bg-success">Matched dates only</span>
+                                            {% elif result.correlation.data_info.handling_method == 'interpolate' %}
+                                            <span class="badge bg-warning text-dark">Linear interpolation</span>
+                                            {% elif result.correlation.data_info.handling_method == 'ffill' %}
+                                            <span class="badge bg-warning text-dark">Forward fill</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% if result.correlation.time_shifted %}
+                                    <tr>
+                                        <th>Time Adjustment:</th>
+                                        <td>
+                                            <span class="badge bg-info">
+                                                Sleep data shifted by 1 day
+                                                <i class="fas fa-info-circle ms-1" data-bs-toggle="tooltip" 
+                                                   title="Sleep data has been shifted by 1 day to properly align with food/activity data."></i>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                    {% if result.correlation.nutrient_density %}
+                                    <tr>
+                                        <th>Nutrient Density:</th>
+                                        <td>
+                                            <span class="badge bg-success">
+                                                Nutrients per 100 calories
+                                                <i class="fas fa-info-circle ms-1" data-bs-toggle="tooltip" 
+                                                   title="Correlation based on nutrient density (per 100 calories) instead of absolute values."></i>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                </table>
+                            </div>
+                        </div>
+                        
+                        {% if result.correlation.data_info.handling_method != 'drop' %}
+                        <div class="alert alert-warning mt-3">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Note:</strong> This correlation analysis includes estimated values. For the most accurate results, consider using "Matched dates only" when datasets have different coverage periods.
+                        </div>
+                        {% endif %}
+                        
+                        {% if result.correlation.data_info.missing_metric1 > 0 or result.correlation.data_info.missing_metric2 > 0 %}
+                        <div class="alert alert-primary mt-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Tip:</strong> Correlation analysis is most reliable when using actual measurements. 
+                            By default, we only analyze dates where both metrics have actual data (not estimates or filled values).
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h3 class="mb-0">Visualization</h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h4 class="text-center mb-3">Scatter Plot</h4>
+                        <div class="chart-container" style="position: relative; height:400px; width:100%">
+                            <canvas id="correlationScatter"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h4 class="text-center mb-3">Time Series</h4>
+                        <div class="chart-container" style="position: relative; height:400px; width:100%">
+                            <canvas id="timeSeriesChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h3 class="mb-0">Data Points</h3>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>{{ result.metric1.display }}</th>
+                                <th>{{ result.metric2.display }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for point in result.data_points %}
+                            <tr class="data-point-row">
+                                <td>{{ point.date }}</td>
+                                <td>{% if point.metric1 is not none %}{{ "%.2f"|format(point.metric1) }}{% else %}<span class="text-muted">N/A</span>{% endif %}</td>
+                                <td>{% if point.metric2 is not none %}{{ "%.2f"|format(point.metric2) }}{% else %}<span class="text-muted">N/A</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <h3 class="mb-0">Error</h3>
+            </div>
+            <div class="card-body">
+                <p class="lead">
+                    {% if result and 'error' in result %}
+                        {{ result.error }}
+                    {% else %}
+                        An unknown error occurred while calculating the correlation.
+                    {% endif %}
+                </p>
+                <div class="mt-4">
+                    <a href="{{ url_for('analysis.correlation') }}" class="btn btn-primary">Try Again</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if result and 'error' not in result %}
+<script>
+$(document).ready(function() {
+    // Prepare data
+    const dataPoints = JSON.parse('{{ result.data_points|tojson|safe }}');
+    const metric1Name = "{{ result.metric1.display }}";
+    const metric2Name = "{{ result.metric2.display }}";
+    
+    // Initialize tooltips
+    $('[data-bs-toggle="tooltip"]').tooltip();
+    
+    // Extract data for charts
+    const validPairs = dataPoints.filter(point => point.metric1 !== null && point.metric2 !== null);
+    const labels = validPairs.map(point => point.date);
+    const data1 = validPairs.map(point => point.metric1);
+    const data2 = validPairs.map(point => point.metric2);
+    
+    // Calculate regression for scatter plot
+    if (validPairs.length > 1) {
+        // Find min and max for x-axis
+        const minX = Math.min(...data1);
+        const maxX = Math.max(...data1);
+        
+        // Simple linear regression function
+        const regData = calculateRegression(data1, data2);
+    }
+    
+    // Create scatter plot
+    const scatterCtx = document.getElementById('correlationScatter').getContext('2d');
+    new Chart(scatterCtx, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'Data Points',
+                data: validPairs.map(point => ({
+                    x: point.metric1,
+                    y: point.metric2
+                })),
+                backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                borderColor: 'rgb(54, 162, 235)',
+                borderWidth: 1,
+                pointRadius: 6,
+                pointHoverRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const point = validPairs[context.dataIndex];
+                            return `Date: ${point.date}, ${metric1Name}: ${point.metric1}, ${metric2Name}: ${point.metric2}`;
+                        }
+                    }
+                },
+                title: {
+                    display: true,
+                    text: `${metric1Name} vs ${metric2Name}`,
+                    font: {
+                        size: 16
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: metric1Name
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: metric2Name
+                    }
+                }
+            }
+        }
+    });
+    
+    // Create time series chart
+    const timeSeriesCtx = document.getElementById('timeSeriesChart').getContext('2d');
+    new Chart(timeSeriesCtx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: metric1Name,
+                    data: data1,
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    yAxisID: 'y',
+                    tension: 0.2
+                },
+                {
+                    label: metric2Name,
+                    data: data2,
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    yAxisID: 'y1',
+                    tension: 0.2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Time Series Data',
+                    font: {
+                        size: 16
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: metric1Name
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    grid: {
+                        drawOnChartArea: false
+                    },
+                    title: {
+                        display: true,
+                        text: metric2Name
+                    }
+                }
+            }
+        }
+    });
+});
+
+function calculateRegression(xs, ys) {
+    const n = xs.length;
+    let sumX = 0;
+    let sumY = 0;
+    let sumXY = 0;
+    let sumXX = 0;
+    
+    for (let i = 0; i < n; i++) {
+        sumX += xs[i];
+        sumY += ys[i];
+        sumXY += xs[i] * ys[i];
+        sumXX += xs[i] * xs[i];
+    }
+    
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+    
+    return {
+        slope: slope,
+        intercept: intercept,
+        fn: function(x) {
+            return slope * x + intercept;
+        }
+    };
+}
+</script>
+{% endif %}
+{% endblock %} 

@@ -1,0 +1,203 @@
+{% extends 'base.html' %}
+
+{% block title %}Data Management - Health Data Tracker{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h1 class="mb-4">Data Management</h1>
+    
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5>Data Overview</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <h6>Data Points</h6>
+                                <p class="display-6">{{ data_count }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <h6>Unique Metrics</h6>
+                                <p class="display-6">{{ metric_count }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <h6>Date Range</h6>
+                                <p>{{ earliest_date.strftime('%Y-%m-%d') if earliest_date else 'N/A' }} to 
+                                   {{ latest_date.strftime('%Y-%m-%d') if latest_date else 'N/A' }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <h6>Data Sources</h6>
+                                <p>{{ data_sources|length }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <a href="{{ url_for('data.import_data') }}" class="btn btn-primary">
+                        <i class="fas fa-file-import me-2"></i>Import Data
+                    </a>
+                    <a href="{{ url_for('data.browse') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-table me-2"></i>Browse Data
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5>Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('data.import_data') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-file-import me-2"></i>Import Data
+                        </a>
+                        <a href="#" class="btn btn-outline-primary">
+                            <i class="fas fa-plus-circle me-2"></i>Add Custom Metric
+                        </a>
+                        <a href="#" class="btn btn-outline-primary">
+                            <i class="fas fa-broom me-2"></i>Clean Data
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Data Sources</h5>
+                    <a href="#" class="btn btn-sm btn-light">Add New</a>
+                </div>
+                <div class="card-body">
+                    {% if data_sources %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>Last Import</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for source in data_sources %}
+                                <tr>
+                                    <td>{{ source.name }}</td>
+                                    <td>{{ source.type }}</td>
+                                    <td>{{ source.last_import.strftime('%Y-%m-%d') if source.last_import else 'Never' }}</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="#" class="btn btn-outline-primary">
+                                                <i class="fas fa-file-import"></i>
+                                            </a>
+                                            <a href="#" class="btn btn-outline-secondary">
+                                                <i class="fas fa-cog"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <p>No data sources configured yet. Import some data to get started.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Custom Metrics</h5>
+                    <a href="#" class="btn btn-sm btn-light">Add New</a>
+                </div>
+                <div class="card-body">
+                    {% if custom_metrics %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Formula</th>
+                                    <th>Unit</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for metric in custom_metrics %}
+                                <tr>
+                                    <td>{{ metric.name }}</td>
+                                    <td>{{ metric.formula[:20] + '...' if metric.formula|length > 20 else metric.formula }}</td>
+                                    <td>{{ metric.unit }}</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="#" class="btn btn-outline-primary">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <a href="#" class="btn btn-outline-danger">
+                                                <i class="fas fa-trash"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <p>No custom metrics defined yet. Create a custom metric to combine or transform your health data.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5>Quick Access</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">Browse Data</h5>
+                            <p class="card-text">View and filter all your health data records.</p>
+                            <a href="{{ url_for('data.browse') }}" class="btn btn-primary">
+                                <i class="fas fa-table me-2"></i>Browse Data
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">Daily View</h5>
+                            <p class="card-text">View all metrics recorded for a specific day.</p>
+                            <a href="{{ url_for('data.date_view') }}" class="btn btn-primary">
+                                <i class="fas fa-calendar-day me-2"></i>Today's Data
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

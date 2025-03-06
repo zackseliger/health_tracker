@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+
+{% block title %}Health Data for {{ formatted_date }} - Health Data Tracker{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Health Data for {{ formatted_date }}</h1>
+        
+        <form method="post" action="{{ url_for('data.date_view') }}" class="d-flex">
+            <input type="date" class="form-control me-2" id="date" name="date" 
+                   value="{{ selected_date.strftime('%Y-%m-%d') }}" required>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-calendar-day me-2"></i>Go to Date
+            </button>
+        </form>
+    </div>
+    
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="btn-group">
+                {% if prev_date %}
+                <a href="{{ url_for('data.date_view', date_str=prev_date.strftime('%Y-%m-%d')) }}" class="btn btn-outline-primary">
+                    <i class="fas fa-chevron-left me-2"></i>Previous Day with Data
+                </a>
+                {% else %}
+                <button disabled class="btn btn-outline-secondary">
+                    <i class="fas fa-chevron-left me-2"></i>Previous Day
+                </button>
+                {% endif %}
+                
+                <a href="{{ url_for('data.date_view') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-calendar-day me-2"></i>Today
+                </a>
+                
+                {% if next_date %}
+                <a href="{{ url_for('data.date_view', date_str=next_date.strftime('%Y-%m-%d')) }}" class="btn btn-outline-primary">
+                    Next Day with Data<i class="fas fa-chevron-right ms-2"></i>
+                </a>
+                {% else %}
+                <button disabled class="btn btn-outline-secondary">
+                    Next Day<i class="fas fa-chevron-right ms-2"></i>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    {% if has_data %}
+        {% for source, data_points in data_by_source.items() %}
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="mb-0">
+                    <span class="badge {% if source == 'oura' %}bg-dark
+                        {% elif source == 'chronometer' %}bg-success
+                        {% elif source == 'custom' %}bg-primary
+                        {% else %}bg-secondary{% endif %}">
+                        {{ source|capitalize }}
+                    </span>
+                    Data
+                </h3>
+                <span class="badge bg-light text-dark">{{ data_points|length }} metrics</span>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Value</th>
+                                <th>Units</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in data_points %}
+                            <tr>
+                                <td>{{ item.metric_name|replace('_', ' ')|capitalize }}</td>
+                                <td>
+                                    <strong>{{ item.metric_value }}</strong>
+                                </td>
+                                <td>{{ item.metric_units }}</td>
+                                <td>{{ item.notes or '' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>No health data found for {{ formatted_date }}.
+        </div>
+    {% endif %}
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h4>Actions</h4>
+                    <div class="btn-group">
+                        <a href="{{ url_for('data.index') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Back to Data Management
+                        </a>
+                        <a href="{{ url_for('data.import_data') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-file-import me-2"></i>Import Data
+                        </a>
+                        <a href="{{ url_for('data.browse') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-table me-2"></i>Browse All Data
+                        </a>
+                        <a href="{{ url_for('analysis.dashboard') }}" class="btn btn-outline-success">
+                            <i class="fas fa-chart-line me-2"></i>Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

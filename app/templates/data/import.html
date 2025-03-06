@@ -1,0 +1,234 @@
+{% extends 'base.html' %}
+
+{% block title %}Import Data - Health Data Tracker{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1>Import Health Data</h1>
+        <p class="lead">Import your health data from various sources to start tracking and analyzing your health metrics.</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Oura Ring Import -->
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-dark text-white">
+                <h3 class="mb-0">Oura Ring</h3>
+            </div>
+            <div class="card-body">
+                <p>Import your sleep, activity, and tag data from your Oura Ring account.</p>
+                <p><strong>Available data:</strong> Sleep score, HRV, respiratory rate, activity score, steps, calories, tags, and more.</p>
+                
+                <hr>
+                
+                {% if oura_connected %}
+                <div class="alert alert-success">
+                    <i class="fas fa-link me-2"></i>Your Oura Ring is connected via personal token.
+                </div>
+                
+                <form method="post" action="{{ url_for('data.import_oura') }}">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="ouraStartDate" class="form-label">Start Date</label>
+                            <input type="date" class="form-control" id="ouraStartDate" name="start_date"
+                                value="{{ oura_last_import_date }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="ouraEndDate" class="form-label">End Date</label>
+                            <input type="date" class="form-control" id="ouraEndDate" name="end_date"
+                                value="{{ today_date }}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Data to Import</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="data_type" id="dataSleep" value="sleep" checked>
+                            <label class="form-check-label" for="dataSleep">
+                                Sleep Data (Sleep score, HRV, respiratory rate)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="data_type" id="dataActivity" value="activity">
+                            <label class="form-check-label" for="dataActivity">
+                                Activity Data (Activity score, steps, calories)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="data_type" id="dataTags" value="tags">
+                            <label class="form-check-label" for="dataTags">
+                                Tag Data (Mood, stress, and other tags)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="data_type" id="dataAll" value="all">
+                            <label class="form-check-label" for="dataAll">
+                                All Data
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-download me-2"></i>Import Data
+                    </button>
+                </form>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>You need to provide your Oura personal access token to import data.
+                </div>
+
+                <p>To connect your Oura Ring, you'll need to generate a personal access token in your Oura Cloud account.</p>
+
+                <a href="{{ url_for('data.connect_oura') }}" class="btn btn-primary">
+                    <i class="fas fa-link me-2"></i>Connect Oura Ring
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Chronometer Import -->
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h3 class="mb-0">Chronometer</h3>
+            </div>
+            <div class="card-body">
+                <p>Import your nutrition data from Chronometer CSV export files.</p>
+                <ul class="list-unstyled mb-4">
+                    <li><i class="fas fa-check-circle text-success me-2"></i>Calorie intake</li>
+                    <li><i class="fas fa-check-circle text-success me-2"></i>Macronutrients (protein, carbs, fat)</li>
+                    <li><i class="fas fa-check-circle text-success me-2"></i>Micronutrients (vitamins, minerals)</li>
+                    <li><i class="fas fa-check-circle text-success me-2"></i>Food diary entries</li>
+                </ul>
+                
+                <form method="post" action="{{ url_for('data.import_data') }}" enctype="multipart/form-data">
+                    <input type="hidden" name="data_source" value="chronometer_csv">
+                    <div class="mb-3">
+                        <label for="chronometerFile" class="form-label">Chronometer CSV File</label>
+                        <input type="file" class="form-control" id="chronometerFile" name="chronometer_file" 
+                               accept=".csv" required>
+                        <div class="form-text">Export your data from Chronometer and upload the CSV file.</div>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="processCategories" name="process_categories" value="yes">
+                        <label class="form-check-label" for="processCategories">Process food categories</label>
+                        <div class="form-text">Extract and store calorie data by food category</div>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-file-import me-2"></i>Upload & Import
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Manual Data Entry -->
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0">Manual Entry</h3>
+            </div>
+            <div class="card-body">
+                <p>Manually enter health data or create custom metrics to track.</p>
+                <ul class="list-unstyled mb-4">
+                    <li><i class="fas fa-check-circle text-success me-2"></i>Custom health metrics</li>
+                    <li><i class="fas fa-check-circle text-success me-2"></i>One-time or recurring entries</li>
+                    <li><i class="fas fa-check-circle text-success me-2"></i>Subjective measurements</li>
+                    <li><i class="fas fa-check-circle text-success me-2"></i>Supplement tracking</li>
+                </ul>
+                
+                <div class="d-grid gap-2">
+                    <a href="#" class="btn btn-primary">
+                        <i class="fas fa-plus-circle me-2"></i>Add Manual Entry
+                    </a>
+                    <a href="#" class="btn btn-outline-primary">
+                        <i class="fas fa-sliders-h me-2"></i>Manage Custom Metrics
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-2">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h3 class="mb-0">Import History</h3>
+            </div>
+            <div class="card-body">
+                {% if import_history %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Source</th>
+                                <th>Date Imported</th>
+                                <th>Date Range</th>
+                                <th>Records</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for import_record in import_history %}
+                            <tr>
+                                <td>
+                                    <span class="badge 
+                                        {% if import_record.source == 'oura' %}bg-dark
+                                        {% elif import_record.source == 'chronometer' %}bg-success
+                                        {% else %}bg-primary{% endif %}">
+                                        {{ import_record.source|capitalize }}
+                                    </span>
+                                </td>
+                                <td>{{ import_record.import_date }}</td>
+                                <td>{{ import_record.start_date }} to {{ import_record.end_date }}</td>
+                                <td>{{ import_record.record_count }}</td>
+                                <td>
+                                    {% if import_record.status == 'success' %}
+                                    <span class="badge bg-success">Success</span>
+                                    {% elif import_record.status == 'partial' %}
+                                    <span class="badge bg-warning text-dark">Partial</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Failed</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>No import history available. Start by importing data from one of the sources above.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Set default dates if not already set
+        if (!$('#ouraStartDate').val()) {
+            // Default to 30 days ago
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            $('#ouraStartDate').val(thirtyDaysAgo.toISOString().split('T')[0]);
+        }
+        
+        if (!$('#ouraEndDate').val()) {
+            // Default to today
+            const today = new Date();
+            $('#ouraEndDate').val(today.toISOString().split('T')[0]);
+        }
+    });
+</script>
+{% endblock %} 

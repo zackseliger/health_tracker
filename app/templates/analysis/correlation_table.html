@@ -1,0 +1,360 @@
+{% extends 'base.html' %}
+
+{% block title %}Correlation Table Analysis - Health Data Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+    .source-section {
+        margin-bottom: 20px;
+    }
+    .metric-select {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    .correlation-table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+    .correlation-table th, .correlation-table td {
+        border: 1px solid #ddd;
+        padding: 4px;
+        text-align: center;
+    }
+    .correlation-table th {
+        background-color: #f2f2f2;
+    }
+    .correlation-significant {
+        font-weight: bold;
+        background-color: rgba(0, 123, 255, 0.2);
+    }
+    .correlation-positive {
+        color: #28a745;
+    }
+    .correlation-negative {
+        color: #dc3545;
+    }
+    .correlation-self {
+        background-color: #f8f9fa;
+    }
+    .correlation-value {
+        font-weight: bold;
+    }
+    .p-value {
+        font-size: 0.8em;
+        color: #6c757d;
+    }
+    .corner-header {
+        background-color: #e9ecef;
+    }
+    .metric-checkbox-container {
+        margin-bottom: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="mb-0">Correlation Table Analysis</h2>
+            </div>
+            <div class="card-body">
+                <p class="lead">
+                    Create a correlation table to visualize relationships between multiple health metrics. 
+                    Select metrics for both X and Y axes and see their correlations in a comprehensive table.
+                </p>
+                
+                {% if error_message %}
+                <div class="alert alert-danger">
+                    {{ error_message }}
+                </div>
+                {% endif %}
+                
+                <form id="correlationTableForm" method="post" action="{{ url_for('analysis.correlation_table') }}">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card mb-4">
+                                <div class="card-header bg-secondary text-white">
+                                    <h4 class="mb-0">X-Axis Metrics</h4>
+                                </div>
+                                <div class="card-body">
+                                    <p>Select metrics to display on the X-axis (columns):</p>
+                                    
+                                    <div class="metric-select">
+                                        {% for source_name, source_metrics in sources.items() %}
+                                        <div class="source-section">
+                                            <h5>{{ source_name }}</h5>
+                                            {% for metric in source_metrics %}
+                                            <div class="metric-checkbox-container">
+                                                <div class="form-check">
+                                                    <input class="form-check-input x-metric-checkbox" 
+                                                           type="checkbox" 
+                                                           name="x_metrics" 
+                                                           value="{{ metric.source }}:{{ metric.metric_name }}" 
+                                                           id="x-{{ metric.source }}-{{ metric.metric_name }}"
+                                                           {% if x_metrics and metric.source + ':' + metric.metric_name in x_metrics %}checked{% endif %}>
+                                                    <label class="form-check-label" for="x-{{ metric.source }}-{{ metric.metric_name }}">
+                                                        {{ metric.display_name }}
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="card mb-4">
+                                <div class="card-header bg-secondary text-white">
+                                    <h4 class="mb-0">Y-Axis Metrics</h4>
+                                </div>
+                                <div class="card-body">
+                                    <p>Select metrics to display on the Y-axis (rows):</p>
+                                    
+                                    <div class="metric-select">
+                                        {% for source_name, source_metrics in sources.items() %}
+                                        <div class="source-section">
+                                            <h5>{{ source_name }}</h5>
+                                            {% for metric in source_metrics %}
+                                            <div class="metric-checkbox-container">
+                                                <div class="form-check">
+                                                    <input class="form-check-input y-metric-checkbox" 
+                                                           type="checkbox" 
+                                                           name="y_metrics" 
+                                                           value="{{ metric.source }}:{{ metric.metric_name }}" 
+                                                           id="y-{{ metric.source }}-{{ metric.metric_name }}"
+                                                           {% if y_metrics and metric.source + ':' + metric.metric_name in y_metrics %}checked{% endif %}>
+                                                    <label class="form-check-label" for="y-{{ metric.source }}-{{ metric.metric_name }}">
+                                                        {{ metric.display_name }}
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card mb-4">
+                                <div class="card-header bg-secondary text-white">
+                                    <h4 class="mb-0">Analysis Parameters</h4>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="dateRange" class="form-label">Date Range:</label>
+                                            <select class="form-select" id="dateRange" name="date_range">
+                                                <option value="1month" {% if date_range == "1month" %}selected{% endif %}>Last Month</option>
+                                                <option value="3months" {% if date_range == "3months" %}selected{% endif %}>Last 3 Months</option>
+                                                <option value="6months" {% if date_range == "6months" %}selected{% endif %}>Last 6 Months</option>
+                                                <option value="1year" {% if date_range == "1year" %}selected{% endif %}>Last Year</option>
+                                                <option value="all" {% if date_range == "all" or not date_range %}selected{% endif %}>All Time</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="col-md-6">
+                                            <label for="method" class="form-label">Correlation Method:</label>
+                                            <select class="form-select" id="method" name="method">
+                                                <option value="pearson" {% if method == "pearson" or not method %}selected{% endif %}>Pearson (Linear)</option>
+                                                <option value="spearman" {% if method == "spearman" %}selected{% endif %}>Spearman (Rank)</option>
+                                                <option value="kendall" {% if method == "kendall" %}selected{% endif %}>Kendall's Tau</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="minPairs" class="form-label">Minimum Data Pairs:</label>
+                                            <input type="number" class="form-control" id="minPairs" name="min_pairs" 
+                                                   value="{{ min_pairs|default(10) }}" min="5" max="100">
+                                        </div>
+                                        
+                                        <div class="col-md-6">
+                                            <label for="handleMissing" class="form-label">Handle Missing Data:</label>
+                                            <select class="form-select" id="handleMissing" name="handle_missing">
+                                                <option value="drop" {% if handle_missing == "drop" or not handle_missing %}selected{% endif %}>Drop Missing Values</option>
+                                                <option value="interpolate" {% if handle_missing == "interpolate" %}selected{% endif %}>Linear Interpolation</option>
+                                                <option value="ffill" {% if handle_missing == "ffill" %}selected{% endif %}>Forward Fill</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="pvalueThreshold" class="form-label">Significance Threshold (p-value):</label>
+                                            <input type="number" class="form-control" id="pvalueThreshold" name="pvalue_threshold" 
+                                                   value="{{ pvalue_threshold|default(0.05) }}" min="0.001" max="0.1" step="0.001">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="card mb-4">
+                                <div class="card-header bg-secondary text-white">
+                                    <h4 class="mb-0">Advanced Options</h4>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3 form-check">
+                                        <input type="checkbox" class="form-check-input" id="timeShiftOura" name="time_shift_oura" value="yes" checked>
+                                        <label class="form-check-label" for="timeShiftOura">
+                                            Adjust Oura sleep metrics by 1 day
+                                        </label>
+                                        <div class="form-text">
+                                            <small><i class="fas fa-info-circle"></i> Shifts Oura sleep data back by 1 day to properly align with data during the day. 
+                                            Sleep data recorded on a given day reflects the previous night's sleep.
+                                            Activity and other non-sleep metrics are not time-shifted.</small>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3 form-check">
+                                        <input type="checkbox" class="form-check-input" id="useDensity" name="use_density" value="yes" checked>
+                                        <label class="form-check-label" for="useDensity">
+                                            Use nutrient density metrics (per 100 calories) rather than absolute values
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg">Generate Correlation Table</button>
+                    </div>
+                </form>
+                
+                {% if correlation_matrix %}
+                <div class="card mt-4">
+                    <div class="card-header bg-success text-white">
+                        <h3 class="mb-0">Correlation Results</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <p><strong>Interpreting the results:</strong></p>
+                            <ul>
+                                <li><span class="correlation-positive">Green</span> values indicate positive correlations, <span class="correlation-negative">red</span> values indicate negative correlations.</li>
+                                <li><span class="correlation-significant">Highlighted cells</span> indicate statistically significant correlations (p-value &lt; {{ pvalue_threshold }}).</li>
+                                <li>Each cell shows the correlation coefficient and p-value.</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="correlation-table">
+                                <thead>
+                                    <tr>
+                                        <th class="corner-header">Metrics</th>
+                                        {% for x_metric in x_metrics %}
+                                            <th>{{ all_metrics[x_metric] }}</th>
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in correlation_matrix %}
+                                        <tr>
+                                            <th>{{ all_metrics[row.metric.full_name] }}</th>
+                                            {% for corr in row.correlations %}
+                                                {% if 'error' in corr %}
+                                                    <td title="{{ corr.error }}">
+                                                        N/A<br>
+                                                        <span class="p-value">Pairs: {{ corr.valid_pairs }}</span>
+                                                    </td>
+                                                {% else %}
+                                                    <td class="
+                                                        {% if corr.significant %}correlation-significant{% endif %}
+                                                        {% if corr.self %}correlation-self{% endif %}
+                                                        "
+                                                        title="Correlation: {{ corr.correlation|round(3) }}, p-value: {{ corr.p_value|round(4) }}{% if corr.interpretation %}, {{ corr.interpretation }}{% endif %}">
+                                                        <span class="correlation-value {% if corr.correlation > 0 %}correlation-positive{% elif corr.correlation < 0 %}correlation-negative{% endif %}">
+                                                            {{ corr.correlation|round(2) }}
+                                                        </span><br>
+                                                        <span class="p-value">p: {{ corr.p_value|round(3) }}</span>
+                                                    </td>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Quick selection buttons
+        const addQuickSelectButtons = () => {
+            const xAxisHeader = document.querySelector('.card-header:contains("X-Axis Metrics")');
+            const yAxisHeader = document.querySelector('.card-header:contains("Y-Axis Metrics")');
+            
+            if (xAxisHeader) {
+                const buttonGroup = document.createElement('div');
+                buttonGroup.className = 'btn-group btn-group-sm float-end';
+                buttonGroup.innerHTML = `
+                    <button type="button" class="btn btn-outline-light select-all-x">Select All</button>
+                    <button type="button" class="btn btn-outline-light clear-all-x">Clear All</button>
+                `;
+                xAxisHeader.appendChild(buttonGroup);
+            }
+            
+            if (yAxisHeader) {
+                const buttonGroup = document.createElement('div');
+                buttonGroup.className = 'btn-group btn-group-sm float-end';
+                buttonGroup.innerHTML = `
+                    <button type="button" class="btn btn-outline-light select-all-y">Select All</button>
+                    <button type="button" class="btn btn-outline-light clear-all-y">Clear All</button>
+                `;
+                yAxisHeader.appendChild(buttonGroup);
+            }
+        };
+        
+        // Add the buttons
+        addQuickSelectButtons();
+        
+        // Event handlers for the buttons
+        document.querySelector('.select-all-x')?.addEventListener('click', function() {
+            document.querySelectorAll('.x-metric-checkbox').forEach(cb => cb.checked = true);
+        });
+        
+        document.querySelector('.clear-all-x')?.addEventListener('click', function() {
+            document.querySelectorAll('.x-metric-checkbox').forEach(cb => cb.checked = false);
+        });
+        
+        document.querySelector('.select-all-y')?.addEventListener('click', function() {
+            document.querySelectorAll('.y-metric-checkbox').forEach(cb => cb.checked = true);
+        });
+        
+        document.querySelector('.clear-all-y')?.addEventListener('click', function() {
+            document.querySelectorAll('.y-metric-checkbox').forEach(cb => cb.checked = false);
+        });
+        
+        // Form validation
+        document.getElementById('correlationTableForm').addEventListener('submit', function(e) {
+            const xMetrics = document.querySelectorAll('.x-metric-checkbox:checked');
+            const yMetrics = document.querySelectorAll('.y-metric-checkbox:checked');
+            
+            if (xMetrics.length === 0 || yMetrics.length === 0) {
+                e.preventDefault();
+                alert('Please select at least one metric for both X and Y axes.');
+            }
+        });
+    });
+</script>
+{% endblock %} 

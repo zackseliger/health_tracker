@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+
+{% block title %}Home - Health Data Tracker{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="jumbotron bg-light p-5 rounded">
+            <h1 class="display-4">Welcome to Health Data Tracker</h1>
+            <p class="lead">Track, analyze, and discover correlations in your health data.</p>
+            <hr class="my-4">
+            <p>Integrate data from Oura Ring, Chronometer, and add your own custom metrics for comprehensive health analysis.</p>
+            <div class="d-grid gap-2 d-md-block">
+                <a class="btn btn-primary btn-lg" href="{{ url_for('data.import_data') }}" role="button">
+                    <i class="fas fa-file-import me-2"></i>Import Data
+                </a>
+                <a class="btn btn-success btn-lg" href="{{ url_for('analysis.correlation') }}" role="button">
+                    <i class="fas fa-chart-line me-2"></i>Analyze Correlations
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-ring fa-3x mb-3 text-primary"></i>
+                <h3 class="card-title">Oura Ring Integration</h3>
+                <p class="card-text">Import your sleep data, HRV, respiratory rate, and more from Oura API or CSV exports.</p>
+                <a href="{{ url_for('data.import_data') }}" class="btn btn-outline-primary">Import Oura Data</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-utensils fa-3x mb-3 text-success"></i>
+                <h3 class="card-title">Chronometer Integration</h3>
+                <p class="card-text">Import nutrition data from Chronometer CSV exports to track nutrients, calories, and more.</p>
+                <a href="{{ url_for('data.import_data') }}" class="btn btn-outline-success">Import Chronometer Data</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-plus-circle fa-3x mb-3 text-danger"></i>
+                <h3 class="card-title">Custom Metrics</h3>
+                <p class="card-text">Add your own custom health metrics like bloodwork results, symptoms, medication, and more.</p>
+                <a href="{{ url_for('data.custom_metrics') }}" class="btn btn-outline-danger">Manage Custom Metrics</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0">Discover Correlations</h3>
+            </div>
+            <div class="card-body">
+                <p class="lead">
+                    Find hidden connections between any two health metrics. For example:
+                </p>
+                <ul class="list-group list-group-flush mb-4">
+                    <li class="list-group-item">
+                        <i class="fas fa-arrow-right me-2 text-primary"></i>
+                        Correlate Vitamin K intake with respiratory rate
+                    </li>
+                    <li class="list-group-item">
+                        <i class="fas fa-arrow-right me-2 text-primary"></i>
+                        See how sleep quality affects heart rate variability
+                    </li>
+                    <li class="list-group-item">
+                        <i class="fas fa-arrow-right me-2 text-primary"></i>
+                        Find relationships between protein intake and recovery metrics
+                    </li>
+                    <li class="list-group-item">
+                        <i class="fas fa-arrow-right me-2 text-primary"></i>
+                        Track how custom symptoms relate to diet changes
+                    </li>
+                </ul>
+                <div class="d-flex justify-content-center">
+                    <a class="btn btn-primary btn-lg" href="{{ url_for('analysis.correlation') }}">
+                        <i class="fas fa-chart-line me-2"></i>Start Correlation Analysis
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if data_sources %}
+<div class="row mt-5">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h3 class="mb-0">Your Data Sources</h3>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Last Import</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for source in data_sources %}
+                            <tr>
+                                <td>{{ source.name }}</td>
+                                <td>{{ source.type }}</td>
+                                <td>
+                                    {% if source.last_import %}
+                                        {{ source.last_import.strftime('%Y-%m-%d %H:%M') }}
+                                    {% else %}
+                                        Never
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %} 

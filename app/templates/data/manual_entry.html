@@ -1,0 +1,396 @@
+{% extends 'base.html' %}
+
+{% block title %}Manual Data Entry - Health Data Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+    .metric-selector {
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 2px solid transparent;
+    }
+    
+    .metric-selector:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .metric-selector.selected {
+        border-color: #0d6efd;
+        background-color: rgba(13, 110, 253, 0.05);
+    }
+    
+    .metric-selector.selected .card-header {
+        background-color: #0d6efd;
+        color: white;
+    }
+    
+    .entry-history-item:hover {
+        background-color: rgba(0,0,0,0.03);
+    }
+    
+    .date-selector {
+        max-width: 200px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1>Manual Data Entry</h1>
+        <p class="lead">Record your health data manually for metrics that aren't automatically tracked.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <a href="{{ url_for('data.custom_metrics') }}" class="btn btn-outline-primary">
+            <i class="fas fa-cog me-2"></i>Manage Metrics
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Step 1: Select Metric -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0">Step 1: Select Metric</h3>
+            </div>
+            <div class="card-body">
+                {% if metrics %}
+                <div class="row" id="metricSelectors">
+                    {% for metric in metrics %}
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100 metric-selector" data-metric-id="{{ metric.id }}" data-metric-name="{{ metric.name }}" data-metric-unit="{{ metric.unit }}" data-metric-type="{{ metric.data_type }}">
+                            <div class="card-header">
+                                <h5 class="mb-0">{{ metric.name }}</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-1">{{ metric.description }}</p>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <span class="badge bg-secondary">{{ metric.unit }}</span>
+                                    <span class="badge bg-info">{{ metric.data_type }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>You don't have any custom metrics yet. Create one to start tracking.
+                </div>
+                <div class="text-center">
+                    <a href="{{ url_for('data.custom_metrics') }}" class="btn btn-primary">
+                        <i class="fas fa-plus-circle me-2"></i>Create Custom Metric
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Step 2: Enter Data -->
+        <div class="card mb-4" id="dataEntryCard" style="display: none;">
+            <div class="card-header bg-success text-white">
+                <h3 class="mb-0">Step 2: Enter Data for <span id="selectedMetricName"></span></h3>
+            </div>
+            <div class="card-body">
+                <form id="dataEntryForm" method="post" action="{{ url_for('data.save_manual_entry') }}">
+                    <input type="hidden" id="metricId" name="metric_id">
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="entryDate" class="form-label">Date</label>
+                            <input type="date" class="form-control date-selector" id="entryDate" name="date" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="entryTime" class="form-label">Time (optional)</label>
+                            <input type="time" class="form-control date-selector" id="entryTime" name="time">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3" id="numericValueField">
+                        <label for="numericValue" class="form-label">Value <span id="unitLabel"></span></label>
+                        <input type="number" class="form-control" id="numericValue" name="numeric_value" step="any">
+                    </div>
+                    
+                    <div class="mb-3" id="booleanValueField" style="display: none;">
+                        <label class="form-label">Value</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="boolean_value" id="booleanValueYes" value="true">
+                            <label class="form-check-label" for="booleanValueYes">Yes</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="boolean_value" id="booleanValueNo" value="false">
+                            <label class="form-check-label" for="booleanValueNo">No</label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3" id="scaleValueField" style="display: none;">
+                        <label for="scaleValue" class="form-label">Value (1-10)</label>
+                        <div class="range">
+                            <input type="range" class="form-range" min="1" max="10" step="1" id="scaleValue" name="scale_value">
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span>1</span>
+                            <span>2</span>
+                            <span>3</span>
+                            <span>4</span>
+                            <span>5</span>
+                            <span>6</span>
+                            <span>7</span>
+                            <span>8</span>
+                            <span>9</span>
+                            <span>10</span>
+                        </div>
+                        <div class="text-center mt-2">
+                            <span class="badge bg-primary" id="scaleValueDisplay">5</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notes (optional)</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save me-2"></i>Save Entry
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="cancelEntryBtn">
+                            <i class="fas fa-times me-2"></i>Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <!-- Recent Entries -->
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h3 class="mb-0">Recent Entries</h3>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_entries %}
+                <ul class="list-group list-group-flush">
+                    {% for entry in recent_entries %}
+                    <li class="list-group-item entry-history-item">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h5 class="mb-1">{{ entry.metric_name }}</h5>
+                                <p class="mb-1">
+                                    <strong>Value:</strong> 
+                                    {% if entry.data_type == 'numeric' %}
+                                        {{ entry.value }} {{ entry.unit }}
+                                    {% elif entry.data_type == 'boolean' %}
+                                        {% if entry.value %}Yes{% else %}No{% endif %}
+                                    {% elif entry.data_type == 'scale' %}
+                                        {{ entry.value }}/10
+                                    {% endif %}
+                                </p>
+                                {% if entry.notes %}
+                                <p class="mb-1 text-muted"><small>{{ entry.notes }}</small></p>
+                                {% endif %}
+                            </div>
+                            <div class="text-end">
+                                <small class="text-muted">{{ entry.date }}</small>
+                                <div class="mt-1">
+                                    <button class="btn btn-sm btn-outline-primary edit-entry-btn" 
+                                            data-entry-id="{{ entry.id }}"
+                                            data-metric-id="{{ entry.metric_id }}"
+                                            data-metric-name="{{ entry.metric_name }}"
+                                            data-value="{{ entry.value }}"
+                                            data-date="{{ entry.date }}"
+                                            data-time="{{ entry.time }}"
+                                            data-notes="{{ entry.notes }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger delete-entry-btn"
+                                            data-entry-id="{{ entry.id }}"
+                                            data-metric-name="{{ entry.metric_name }}">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-center py-4">
+                    <p>No recent entries found.</p>
+                </div>
+                {% endif %}
+            </div>
+            {% if recent_entries %}
+            <div class="card-footer">
+                <a href="{{ url_for('data.entry_history') }}" class="btn btn-outline-info btn-sm w-100">
+                    <i class="fas fa-history me-2"></i>View All Entries
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Delete Entry Confirmation Modal -->
+<div class="modal fade" id="deleteEntryModal" tabindex="-1" aria-labelledby="deleteEntryModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteEntryModalLabel">Confirm Deletion</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this entry for "<span id="deleteEntryMetricName"></span>"?</p>
+                <p class="text-danger"><strong>Warning:</strong> This action cannot be undone.</p>
+                <form id="deleteEntryForm" method="post" action="{{ url_for('data.delete_entry') }}">
+                    <input type="hidden" id="deleteEntryId" name="entry_id">
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="deleteEntryForm" class="btn btn-danger">Delete Entry</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Set default date to today
+        const today = new Date();
+        $('#entryDate').val(today.toISOString().split('T')[0]);
+        
+        // Handle metric selection
+        $('.metric-selector').click(function() {
+            // Remove selected class from all metrics
+            $('.metric-selector').removeClass('selected');
+            
+            // Add selected class to clicked metric
+            $(this).addClass('selected');
+            
+            // Get metric details
+            const metricId = $(this).data('metric-id');
+            const metricName = $(this).data('metric-name');
+            const metricUnit = $(this).data('metric-unit');
+            const metricType = $(this).data('metric-type');
+            
+            // Update form
+            $('#metricId').val(metricId);
+            $('#selectedMetricName').text(metricName);
+            $('#unitLabel').text('(' + metricUnit + ')');
+            
+            // Show appropriate value field based on metric type
+            if (metricType === 'numeric') {
+                $('#numericValueField').show();
+                $('#booleanValueField').hide();
+                $('#scaleValueField').hide();
+            } else if (metricType === 'boolean') {
+                $('#numericValueField').hide();
+                $('#booleanValueField').show();
+                $('#scaleValueField').hide();
+            } else if (metricType === 'scale') {
+                $('#numericValueField').hide();
+                $('#booleanValueField').hide();
+                $('#scaleValueField').show();
+            }
+            
+            // Show data entry card
+            $('#dataEntryCard').show();
+            
+            // Scroll to data entry card
+            $('html, body').animate({
+                scrollTop: $('#dataEntryCard').offset().top - 20
+            }, 500);
+        });
+        
+        // Handle cancel button
+        $('#cancelEntryBtn').click(function() {
+            // Hide data entry card
+            $('#dataEntryCard').hide();
+            
+            // Remove selected class from all metrics
+            $('.metric-selector').removeClass('selected');
+            
+            // Reset form
+            $('#dataEntryForm')[0].reset();
+            
+            // Scroll back to top
+            $('html, body').animate({
+                scrollTop: 0
+            }, 500);
+        });
+        
+        // Update scale value display
+        $('#scaleValue').on('input', function() {
+            $('#scaleValueDisplay').text($(this).val());
+        });
+        
+        // Handle edit entry button
+        $('.edit-entry-btn').click(function() {
+            const entryId = $(this).data('entry-id');
+            const metricId = $(this).data('metric-id');
+            const metricName = $(this).data('metric-name');
+            const value = $(this).data('value');
+            const date = $(this).data('date');
+            const time = $(this).data('time');
+            const notes = $(this).data('notes');
+            
+            // Find and select the metric
+            $('.metric-selector[data-metric-id="' + metricId + '"]').click();
+            
+            // Update form with entry data
+            $('#entryDate').val(date);
+            $('#entryTime').val(time);
+            $('#notes').val(notes);
+            
+            // Set value based on metric type
+            const metricType = $('.metric-selector[data-metric-id="' + metricId + '"]').data('metric-type');
+            if (metricType === 'numeric') {
+                $('#numericValue').val(value);
+            } else if (metricType === 'boolean') {
+                if (value) {
+                    $('#booleanValueYes').prop('checked', true);
+                } else {
+                    $('#booleanValueNo').prop('checked', true);
+                }
+            } else if (metricType === 'scale') {
+                $('#scaleValue').val(value);
+                $('#scaleValueDisplay').text(value);
+            }
+            
+            // Add entry ID to form for update
+            if (!$('#entryId').length) {
+                $('<input>').attr({
+                    type: 'hidden',
+                    id: 'entryId',
+                    name: 'entry_id',
+                    value: entryId
+                }).appendTo('#dataEntryForm');
+            } else {
+                $('#entryId').val(entryId);
+            }
+        });
+        
+        // Handle delete entry button
+        $('.delete-entry-btn').click(function() {
+            const entryId = $(this).data('entry-id');
+            const metricName = $(this).data('metric-name');
+            
+            $('#deleteEntryId').val(entryId);
+            $('#deleteEntryMetricName').text(metricName);
+            
+            $('#deleteEntryModal').modal('show');
+        });
+        
+        // Pre-select metric if provided in URL
+        {% if selected_metric_id %}
+        $('.metric-selector[data-metric-id="{{ selected_metric_id }}"]').click();
+        {% endif %}
+    });
+</script>
+{% endblock %} 
