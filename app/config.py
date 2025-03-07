@@ -1,22 +1,16 @@
 import os
-from datetime import timedelta
+import secrets
 
 class Config:
     """Base configuration class"""
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'a-very-secret-key-for-development'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(16)
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///health_data.db'
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # File upload settings
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB max upload size
     
     # Oura API settings
     OURA_API_BASE_URL = 'https://api.ouraring.com'
-    OURA_PERSONAL_TOKEN = os.environ.get('OURA_PERSONAL_TOKEN') # TODO: put in environment variable
-    
-    # Session lifetime settings
-    PERMANENT_SESSION_LIFETIME = timedelta(days=7)
     
     @staticmethod
     def init_app(app):
@@ -32,7 +26,6 @@ class TestingConfig(Config):
     """Testing configuration"""
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
-    WTF_CSRF_ENABLED = False
     SERVER_NAME = 'localhost'
 
 class ProductionConfig(Config):

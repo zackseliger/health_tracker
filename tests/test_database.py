@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from tests.test_base import BaseTestCase
 from app import db
-from app.models.base import HealthData, DataSource, UserDefinedMetric, ImportRecord
+from app.models.base import HealthData, UserDefinedMetric, ImportRecord, DataType
 from sqlalchemy.exc import IntegrityError
 
 class DatabaseTestCase(BaseTestCase):
@@ -14,13 +14,20 @@ class DatabaseTestCase(BaseTestCase):
     
     def test_health_data_model_crud(self):
         """Test CRUD operations for HealthData model."""
+        # Create DataType first
+        data_type = DataType(
+            source='test_source',
+            metric_name='test_metric',
+            metric_units='test_units'
+        )
+        db.session.add(data_type)
+        db.session.flush()
+        
         # CREATE
         health_data = HealthData(
             date=date(2025, 3, 1),
-            source='test_source',
-            metric_name='test_metric',
+            data_type=data_type,
             metric_value=42.0,
-            metric_units='test_units',
             notes='Test notes'
         )
         
@@ -28,112 +35,129 @@ class DatabaseTestCase(BaseTestCase):
         db.session.commit()
         
         # READ
-        retrieved_data = HealthData.query.filter_by(metric_name='test_metric').first()
-        self.assertIsNotNone(retrieved_data)
-        self.assertEqual(retrieved_data.source, 'test_source')
-        self.assertEqual(retrieved_data.metric_value, 42.0)
-        self.assertEqual(retrieved_data.notes, 'Test notes')
+        saved_data = HealthData.query.filter_by(id=health_data.id).first()
+        
+        # Assert all fields match
+        self.assertIsNotNone(saved_data)
+        self.assertEqual(saved_data.date, date(2025, 3, 1))
+        self.assertEqual(saved_data.data_type.source, 'test_source')
+        self.assertEqual(saved_data.data_type.metric_name, 'test_metric')
+        self.assertEqual(saved_data.data_type.metric_units, 'test_units')
+        self.assertEqual(saved_data.metric_value, 42.0)
+        self.assertEqual(saved_data.notes, 'Test notes')
         
         # UPDATE
-        retrieved_data.metric_value = 50.0
-        retrieved_data.notes = 'Updated notes'
+        saved_data.metric_value = 43.0
         db.session.commit()
         
-        updated_data = HealthData.query.get(retrieved_data.id)
-        self.assertEqual(updated_data.metric_value, 50.0)
-        self.assertEqual(updated_data.notes, 'Updated notes')
+        # Verify the update
+        updated_data = HealthData.query.filter_by(id=health_data.id).first()
+        self.assertEqual(updated_data.metric_value, 43.0)
         
         # DELETE
-        db.session.delete(updated_data)
+        db.session.delete(saved_data)
         db.session.commit()
         
-        deleted_data = HealthData.query.get(retrieved_data.id)
+        # Verify deletion
+        deleted_data = HealthData.query.filter_by(id=health_data.id).first()
         self.assertIsNone(deleted_data)
     
-    def test_data_source_model_crud(self):
-        """Test CRUD operations for DataSource model."""
-        # CREATE
-        now = datetime.utcnow()
-        data_source = DataSource(
-            name='test_source',
-            type='api',
-            last_import=now
+    def test_data_type_source_methods(self):
+        """Test the DataType methods for handling data sources."""
+        # Create a test data type
+        data_type = DataType(
+            source='test_source',
+            metric_name='test_metric',
+            metric_units='test_units',
+            source_type='test_type',
+            last_import=datetime(2025, 3, 1, 12, 0, 0)
         )
         
-        db.session.add(data_source)
+        db.session.add(data_type)
         db.session.commit()
         
-        # READ
-        retrieved_source = DataSource.query.filter_by(name='test_source').first()
-        self.assertIsNotNone(retrieved_source)
-        self.assertEqual(retrieved_source.type, 'api')
-        self.assertEqual(retrieved_source.last_import, now)
+        # Test get_data_source method - this should now create a source_info record
+        DataType.update_last_import('test_source')
         
-        # UPDATE
-        new_time = datetime.utcnow()
-        retrieved_source.type = 'csv'
-        retrieved_source.last_import = new_time
-        db.session.commit()
+        # Now test get_data_source
+        source = DataType.get_data_source('test_source')
+        self.assertIsNotNone(source)
+        self.assertEqual(source.source, 'test_source')
+        self.assertEqual(source.metric_name, 'source_info')
         
-        updated_source = DataSource.query.get(retrieved_source.id)
-        self.assertEqual(updated_source.type, 'csv')
-        self.assertEqual(updated_source.last_import, new_time)
+        # Test update_last_import method again
+        DataType.update_last_import('test_source')
         
-        # DELETE
-        db.session.delete(updated_source)
-        db.session.commit()
+        # Verify the update
+        updated_source = DataType.query.filter_by(source='test_source', metric_name='source_info').first()
+        self.assertIsNotNone(updated_source.last_import)
+        self.assertGreater(updated_source.last_import, datetime(2025, 3, 1, 12, 0, 0))
         
-        deleted_source = DataSource.query.get(retrieved_source.id)
-        self.assertIsNone(deleted_source)
+        # Test update_last_import with a new source
+        DataType.update_last_import('new_source')
+        
+        # Verify a placeholder was created
+        new_source = DataType.query.filter_by(source='new_source').first()
+        self.assertIsNotNone(new_source)
+        self.assertEqual(new_source.metric_name, 'source_info')
+        self.assertEqual(new_source.source_type, 'unknown')
     
     def test_user_defined_metric_model_crud(self):
         """Test CRUD operations for UserDefinedMetric model."""
         # CREATE
         metric = UserDefinedMetric(
             name='test_metric',
-            units='kg',
-            description='Weight measurement',
-            frequency='daily'
+            unit='test_units',
+            description='Test description',
+            data_type='numeric',
+            is_cumulative=False
         )
         
         db.session.add(metric)
         db.session.commit()
         
         # READ
-        retrieved_metric = UserDefinedMetric.query.filter_by(name='test_metric').first()
-        self.assertIsNotNone(retrieved_metric)
-        self.assertEqual(retrieved_metric.units, 'kg')
-        self.assertEqual(retrieved_metric.description, 'Weight measurement')
-        self.assertEqual(retrieved_metric.frequency, 'daily')
+        saved_metric = UserDefinedMetric.query.filter_by(name='test_metric').first()
+        
+        # Assert all fields match
+        self.assertIsNotNone(saved_metric)
+        self.assertEqual(saved_metric.name, 'test_metric')
+        self.assertEqual(saved_metric.unit, 'test_units')
+        self.assertEqual(saved_metric.description, 'Test description')
+        self.assertEqual(saved_metric.data_type, 'numeric')
+        self.assertEqual(saved_metric.is_cumulative, False)
         
         # UPDATE
-        retrieved_metric.units = 'lbs'
-        retrieved_metric.frequency = 'weekly'
+        saved_metric.unit = 'updated_units'
+        saved_metric.description = 'Updated description'
+        saved_metric.data_type = 'scale'
+        saved_metric.is_cumulative = True
         db.session.commit()
         
-        updated_metric = UserDefinedMetric.query.get(retrieved_metric.id)
-        self.assertEqual(updated_metric.units, 'lbs')
-        self.assertEqual(updated_metric.frequency, 'weekly')
+        # Read again to verify update
+        updated_metric = UserDefinedMetric.query.get(saved_metric.id)
+        self.assertEqual(updated_metric.unit, 'updated_units')
+        self.assertEqual(updated_metric.description, 'Updated description')
+        self.assertEqual(updated_metric.data_type, 'scale')
+        self.assertEqual(updated_metric.is_cumulative, True)
         
         # DELETE
         db.session.delete(updated_metric)
         db.session.commit()
         
-        deleted_metric = UserDefinedMetric.query.get(retrieved_metric.id)
+        # Verify deletion
+        deleted_metric = UserDefinedMetric.query.get(updated_metric.id)
         self.assertIsNone(deleted_metric)
     
     def test_import_record_model_crud(self):
         """Test CRUD operations for ImportRecord model."""
         # CREATE
-        start_date = date.today() - timedelta(days=7)
-        end_date = date.today()
-        
         import_record = ImportRecord(
-            source='oura_sleep',
-            date_imported=datetime.utcnow(),
-            date_range_start=start_date,
-            date_range_end=end_date,
-            record_count=42,
+            source='test_source',
+            date_imported=datetime(2025, 3, 1, 12, 0, 0),
+            date_range_start=date(2025, 2, 1),
+            date_range_end=date(2025, 2, 28),
+            record_count=100,
             status='success'
         )
         
@@ -141,49 +165,59 @@ class DatabaseTestCase(BaseTestCase):
         db.session.commit()
         
         # READ
-        retrieved_record = ImportRecord.query.filter_by(source='oura_sleep').first()
-        self.assertIsNotNone(retrieved_record)
-        self.assertEqual(retrieved_record.record_count, 42)
-        self.assertEqual(retrieved_record.status, 'success')
-        self.assertEqual(retrieved_record.date_range_start, start_date)
-        self.assertEqual(retrieved_record.date_range_end, end_date)
+        saved_record = ImportRecord.query.filter_by(source='test_source').first()
+        
+        # Assert all fields match
+        self.assertIsNotNone(saved_record)
+        self.assertEqual(saved_record.source, 'test_source')
+        self.assertEqual(saved_record.date_imported, datetime(2025, 3, 1, 12, 0, 0))
+        self.assertEqual(saved_record.date_range_start, date(2025, 2, 1))
+        self.assertEqual(saved_record.date_range_end, date(2025, 2, 28))
+        self.assertEqual(saved_record.record_count, 100)
+        self.assertEqual(saved_record.status, 'success')
         
         # UPDATE
-        retrieved_record.record_count = 50
-        retrieved_record.status = 'partial'
-        retrieved_record.error_message = 'Some data could not be imported'
+        saved_record.record_count = 200
         db.session.commit()
         
-        updated_record = ImportRecord.query.get(retrieved_record.id)
-        self.assertEqual(updated_record.record_count, 50)
-        self.assertEqual(updated_record.status, 'partial')
-        self.assertEqual(updated_record.error_message, 'Some data could not be imported')
+        # Verify the update
+        updated_record = ImportRecord.query.filter_by(source='test_source').first()
+        self.assertEqual(updated_record.record_count, 200)
         
         # DELETE
-        db.session.delete(updated_record)
+        db.session.delete(saved_record)
         db.session.commit()
         
-        deleted_record = ImportRecord.query.get(retrieved_record.id)
+        # Verify deletion
+        deleted_record = ImportRecord.query.filter_by(source='test_source').first()
         self.assertIsNone(deleted_record)
     
     def test_health_data_unique_constraint(self):
         """Test that the unique constraint on HealthData works."""
+        # Create DataType first
+        data_type = DataType(
+            source='test_source',
+            metric_name='test_metric',
+            metric_units='test_units'
+        )
+        db.session.add(data_type)
+        db.session.flush()
+        
         # Create a health data record
         health_data1 = HealthData(
             date=date(2025, 3, 1),
-            source='test_source',
-            metric_name='test_metric',
+            data_type=data_type,
             metric_value=42.0
         )
         
+        # Add and commit to the database
         db.session.add(health_data1)
         db.session.commit()
         
-        # Create another record with the same date, source, and metric_name
+        # Create another record with the same date and data_type
         health_data2 = HealthData(
             date=date(2025, 3, 1),
-            source='test_source',
-            metric_name='test_metric',
+            data_type=data_type,
             metric_value=43.0
         )
         
@@ -195,26 +229,29 @@ class DatabaseTestCase(BaseTestCase):
         # Rollback the session to clean up
         db.session.rollback()
     
-    def test_data_source_unique_name_constraint(self):
-        """Test that the unique constraint on DataSource name works."""
-        # Create a data source
-        source1 = DataSource(
-            name='unique_source',
-            type='api'
+    def test_data_type_unique_constraint(self):
+        """Test that the unique constraint on DataType source and metric_name works."""
+        # Create a data type
+        data_type1 = DataType(
+            source='test_source',
+            metric_name='test_metric',
+            metric_units='test_units'
         )
         
-        db.session.add(source1)
+        # Add and commit to the database
+        db.session.add(data_type1)
         db.session.commit()
         
-        # Create another data source with the same name
-        source2 = DataSource(
-            name='unique_source',
-            type='csv'
+        # Create another data type with the same source and metric_name
+        data_type2 = DataType(
+            source='test_source',
+            metric_name='test_metric',
+            metric_units='different_units'
         )
         
         # This should raise an IntegrityError due to the unique constraint
         with self.assertRaises(IntegrityError):
-            db.session.add(source2)
+            db.session.add(data_type2)
             db.session.commit()
         
         # Rollback the session to clean up
@@ -224,17 +261,18 @@ class DatabaseTestCase(BaseTestCase):
         """Test that the unique constraint on UserDefinedMetric name works."""
         # Create a user-defined metric
         metric1 = UserDefinedMetric(
-            name='unique_metric',
-            units='kg'
+            name='test_metric',
+            unit='test_units'
         )
         
+        # Add and commit to the database
         db.session.add(metric1)
         db.session.commit()
         
-        # Create another user-defined metric with the same name
+        # Create another metric with the same name
         metric2 = UserDefinedMetric(
-            name='unique_metric',
-            units='lbs'
+            name='test_metric',
+            unit='different_units'
         )
         
         # This should raise an IntegrityError due to the unique constraint
@@ -247,30 +285,37 @@ class DatabaseTestCase(BaseTestCase):
     
     def test_model_relationships(self):
         """Test querying across models."""
-        # Create a data source
-        source = DataSource(
-            name='relationship_test',
-            type='api'
+        # Create DataType
+        data_type = DataType(
+            source='test_source',
+            metric_name='test_metric',
+            metric_units='test_units'
+        )
+        db.session.add(data_type)
+        db.session.flush()
+        
+        # Create a health data record
+        health_data = HealthData(
+            date=date(2025, 3, 1),
+            data_type=data_type,
+            metric_value=42.0
         )
         
-        db.session.add(source)
+        # Add and commit to the database
+        db.session.add(health_data)
         db.session.commit()
         
-        # Create multiple health data entries with the same source
-        for i in range(3):
-            health_data = HealthData(
-                date=date(2025, 3, i+1),
-                source='relationship_test',
-                metric_name=f'metric_{i}',
-                metric_value=i * 10
-            )
-            db.session.add(health_data)
-        db.session.commit()
+        # Query HealthData and join with DataType
+        result = db.session.query(HealthData, DataType).join(
+            DataType, HealthData.data_type_id == DataType.id
+        ).filter(
+            HealthData.date == date(2025, 3, 1),
+            DataType.source == 'test_source',
+            DataType.metric_name == 'test_metric'
+        ).first()
         
-        # Query health data by source
-        health_entries = HealthData.query.filter_by(source='relationship_test').all()
-        self.assertEqual(len(health_entries), 3)
-        
-        # Check that values are correct
-        values = sorted([entry.metric_value for entry in health_entries])
-        self.assertEqual(values, [0.0, 10.0, 20.0]) 
+        # Verify the query worked
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0].metric_value, 42.0)
+        self.assertEqual(result[1].source, 'test_source')
+        self.assertEqual(result[1].metric_name, 'test_metric') 

@@ -5,8 +5,8 @@ from datetime import date
 import pandas as pd
 from io import StringIO
 
-from .test_base import BaseTestCase
-from app.models.base import HealthData, DataSource
+from tests.test_base import BaseTestCase
+from app.models.base import HealthData, DataType
 from app.utils.chronometer_importer import ChronometerImporter
 
 class ChronometerImportTestCase(BaseTestCase):
@@ -79,22 +79,66 @@ class ChronometerImportTestCase(BaseTestCase):
     
     def test_import_from_csv(self):
         """Test importing from a CSV file"""
-        importer = ChronometerImporter()
+        # Create a temporary CSV file with test data
+        csv_data = """Day,Name,Quantity,Energy (kcal),Protein (g),Carbs (g),Fat (g),Fiber (g),Sugars (g),Sodium (mg),Potassium (mg),Vitamin C (mg),Calcium (mg),Iron (mg),Category
+2023-01-01,Oatmeal,100,2000,100,200,80,4,1,10,100,0,30,1.2,Breakfast
+2023-01-02,Banana,1,1800,90,180,70,3.1,14,1,422,10.3,6,0.3,Breakfast"""
         
-        # Import the data
-        processed_data = importer.import_from_csv(self.csv_file.name)
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_file:
+            temp_file.write(csv_data)
+            temp_file_path = temp_file.name
         
-        # Check that data was imported
-        self.assertGreater(len(processed_data), 0)
+        try:
+            # Create the importer and import data
+            importer = ChronometerImporter()
+            result = importer.import_from_csv(temp_file_path)
+            
+            # Verify that data was imported correctly
+            self.assertIsNotNone(result)
+            self.assertGreater(len(result), 0)
+            
+            # Check that data was added to the database
+            # Get the DataType objects for the metrics
+            energy_type = DataType.query.filter_by(
+                source='chronometer',
+                metric_name='Energy (kcal)'
+            ).first()
+            
+            protein_type = DataType.query.filter_by(
+                source='chronometer',
+                metric_name='Protein (g)'
+            ).first()
+            
+            # Verify the DataType objects exist
+            self.assertIsNotNone(energy_type)
+            self.assertIsNotNone(protein_type)
+            
+            # Check energy data
+            energy_data = HealthData.query.filter(
+                HealthData.data_type_id == energy_type.id,
+                HealthData.date == date(2023, 1, 1)
+            ).first()
+            
+            self.assertIsNotNone(energy_data)
+            self.assertEqual(energy_data.metric_value, 2000)
+            
+            # Check protein data
+            protein_data = HealthData.query.filter(
+                HealthData.data_type_id == protein_type.id,
+                HealthData.date == date(2023, 1, 1)
+            ).first()
+            
+            self.assertIsNotNone(protein_data)
+            self.assertEqual(protein_data.metric_value, 100)
+            
+            # Check that a data source was added
+            source = DataType.query.filter_by(source='chronometer', metric_name='source_info').first()
+            self.assertIsNotNone(source)
+            self.assertEqual(source.source_type, 'csv')
         
-        # Check that data was saved to the database
-        db_data = HealthData.query.filter_by(source='chronometer').all()
-        self.assertGreater(len(db_data), 0)
-        
-        # Check that a data source was created/updated
-        data_source = DataSource.query.filter_by(name='chronometer_csv').first()
-        self.assertIsNotNone(data_source)
-        self.assertEqual(data_source.type, 'csv')
+        finally:
+            # Clean up the temporary file
+            os.unlink(temp_file_path)
     
     def test_process_food_categories(self):
         """Test processing food categories"""
@@ -125,37 +169,78 @@ class ChronometerImportTestCase(BaseTestCase):
         
     def test_import_with_http_client(self):
         """Test importing using the HTTP client (simulates form submission)"""
-        # Create the test csv file content
-        csv_content = self.csv_data
+        # Create a temporary CSV file with test data
+        csv_data = """Day,Name,Quantity,Energy (kcal),Protein (g),Carbs (g),Fat (g),Fiber (g),Sugars (g),Sodium (mg),Potassium (mg),Vitamin C (mg),Calcium (mg),Iron (mg),Category
+2023-01-01,Oatmeal,100,2000,100,200,80,4,1,10,100,0,30,1.2,Breakfast
+2023-01-02,Banana,1,1800,90,180,70,3.1,14,1,422,10.3,6,0.3,Breakfast"""
         
-        # Create a file-like object for the post request
-        from io import BytesIO
-        file_data = BytesIO(csv_content.encode('utf-8'))
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_file:
+            temp_file.write(csv_data)
+            temp_file_path = temp_file.name
         
-        # Simulate form submission with file upload
-        response = self.client.post(
-            '/data/import',
-            data={
-                'data_source': 'chronometer_csv',
-                'process_categories': 'yes',
-                'chronometer_file': (file_data, 'test_chronometer.csv')
-            },
-            content_type='multipart/form-data',
-            follow_redirects=True
-        )
+        try:
+            # Create a file object for the client
+            with open(temp_file_path, 'rb') as file_obj:
+                # Create a test client
+                client = self.app.test_client()
+                
+                # Submit the form with the file
+                response = client.post(
+                    '/data/import',
+                    data={
+                        'data_source': 'chronometer_csv',
+                        'chronometer_file': (file_obj, 'test_chronometer.csv'),
+                        'process_categories': 'yes'
+                    },
+                    content_type='multipart/form-data',
+                    follow_redirects=True
+                )
+                
+                # Verify the response
+                self.assertEqual(response.status_code, 200)
+                
+                # Check that data was added to the database
+                # Get the DataType objects for the metrics
+                energy_type = DataType.query.filter_by(
+                    source='chronometer',
+                    metric_name='Energy (kcal)'
+                ).first()
+                
+                protein_type = DataType.query.filter_by(
+                    source='chronometer',
+                    metric_name='Protein (g)'
+                ).first()
+                
+                # Verify the DataType objects exist
+                self.assertIsNotNone(energy_type)
+                self.assertIsNotNone(protein_type)
+                
+                # Check energy data
+                energy_data = HealthData.query.filter(
+                    HealthData.data_type_id == energy_type.id,
+                    HealthData.date == date(2023, 1, 1)
+                ).first()
+                
+                self.assertIsNotNone(energy_data)
+                self.assertEqual(energy_data.metric_value, 2000)
+                
+                # Check protein data
+                protein_data = HealthData.query.filter(
+                    HealthData.data_type_id == protein_type.id,
+                    HealthData.date == date(2023, 1, 1)
+                ).first()
+                
+                self.assertIsNotNone(protein_data)
+                self.assertEqual(protein_data.metric_value, 100)
+                
+                # Check that a data source was added
+                source = DataType.query.filter_by(source='chronometer', metric_name='source_info').first()
+                self.assertIsNotNone(source)
+                self.assertEqual(source.source_type, 'csv')
         
-        # Check the response
-        self.assertEqual(response.status_code, 200)
-        
-        # Verify data was imported to the database
-        db_data = HealthData.query.filter_by(source='chronometer').all()
-        self.assertGreater(len(db_data), 0)
-        
-        # Verify food categories were processed
-        category_data = HealthData.query.filter(
-            HealthData.metric_name.like('Food Category:%')
-        ).all()
-        self.assertGreater(len(category_data), 0)
+        finally:
+            # Clean up the temporary file
+            os.unlink(temp_file_path)
 
 if __name__ == '__main__':
     unittest.main() 

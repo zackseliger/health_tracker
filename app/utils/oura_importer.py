@@ -1,19 +1,18 @@
-import os
-import json
 import requests
-import pandas as pd
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 from flask import current_app
 from .. import db
-from ..models.base import HealthData, DataSource, ImportRecord
+from ..models.base import HealthData, DataType
+import json
 
 class OuraImporter:
     """Utility class for importing Oura Ring data through API"""
     
-    def __init__(self, personal_token=None):
-        self.personal_token = personal_token
+    def __init__(self, personal_token=None, access_token=None):
+        self.personal_token = personal_token if personal_token else access_token
         self.api_base_url = "https://api.ouraring.com"
         self.auth_header = {'Authorization': f'Bearer {self.personal_token}'}
+        self.debug = current_app.config.get('DEBUG', False)
     
     def _get_data(self, endpoint, params=None):
         """Helper method to fetch data from Oura API"""
@@ -44,13 +43,19 @@ class OuraImporter:
         self._store_data(processed_data, 'oura')
         
         # Update data source record
-        self._update_data_source('oura_sleep')
+        self._update_data_source('oura')
         
         return processed_data
     
     def _process_sleep_data(self, sleep_data, daily_sleep_data):
         """Process raw Oura sleep data into a format for our database"""
         processed_data = []
+        
+        # Create a mapping of dates to REM sleep data to ensure we have metrics for all days
+        day_to_rem_sleep = {}
+        day_to_deep_sleep = {}
+        day_to_light_sleep = {}
+        day_to_awake_time = {}
         
         # Process daily summary metrics
         for day in daily_sleep_data.get('data', []):
@@ -106,422 +111,304 @@ class OuraImporter:
                     'metric_value': day['contributors']['latency'],
                     'metric_units': 'score'
                 })
+                
+            # Initialize tracking for this day
+            day_to_rem_sleep[date] = 0
+            day_to_deep_sleep[date] = 0
+            day_to_light_sleep[date] = 0
+            day_to_awake_time[date] = 0
         
         # Process detailed sleep sessions
-        prev_day = None
-        day_hr_data = []
-        day_hrv_data = []
-        day_hr_data2 = []
-        day_hrv_data2 = []
-        day_avg_resp = []
-        day_time_asleep = []
+        day_hr_data = {}
+        day_hrv_data = {}
+        day_hr_data2 = {}
+        day_hrv_data2 = {}
+        day_avg_resp = {}
+        day_time_asleep = {}
+        
+        # Initialize these dictionaries for each date
+        for day in day_to_rem_sleep.keys():
+            day_hr_data[day] = []
+            day_hrv_data[day] = []
+            day_hr_data2[day] = []
+            day_hrv_data2[day] = []
+            day_avg_resp[day] = []
+            day_time_asleep[day] = []
+        
         # Track sleep stage totals for each day
-        day_rem_sleep = 0
-        day_deep_sleep = 0
-        day_light_sleep = 0
-        day_awake_time = 0
-        long_hrv = 0
-        long_hr = 0
-        long_resp = 0
-        long_efficiency = 0
-        long_readiness = 0
+        long_hr = {}
+        long_hrv = {}
+        long_resp = {}
+        long_efficiency = {}
+        long_readiness = {}
         
         for sleep in sleep_data.get('data', []):
             day = sleep.get('day')
-            if not day:
+            if not day or day not in day_to_rem_sleep:
                 continue
-                
-            # When we move to a new day, process the previous day's data
-            if day != prev_day and prev_day is not None:
-                avg_hr2 = 0
-                avg_hrv2 = 0
-                avg_resp = 0
-                
-                if day_time_asleep:  # Make sure we have data
-                    total_time_asleep = sum(day_time_asleep)
-                    for i in range(len(day_hr_data2)):
-                        avg_hr2 += day_hr_data2[i] * (day_time_asleep[i] / total_time_asleep)
-                        avg_hrv2 += day_hrv_data2[i] * (day_time_asleep[i] / total_time_asleep)
-                        avg_resp += day_avg_resp[i] * (day_time_asleep[i] / total_time_asleep)
-                
-                    # Convert previous day string to datetime
-                    try:
-                        prev_day_obj = datetime.strptime(prev_day, "%Y-%m-%d").date()
-                    except ValueError:
-                        current_app.logger.error(f"Invalid date format: {prev_day}")
-                        prev_day = day
-                        continue
-                
-                    # Store metrics for the previous day
-                    if day_hr_data:
-                        processed_data.append({
-                            'date': prev_day_obj,
-                            'metric_name': 'avg_hr_alt',
-                            'metric_value': sum(day_hr_data) / len(day_hr_data),
-                            'metric_units': 'bpm'
-                        })
-                    
-                    if day_hrv_data:
-                        processed_data.append({
-                            'date': prev_day_obj,
-                            'metric_name': 'avg_hrv_alt',
-                            'metric_value': sum(day_hrv_data) / len(day_hrv_data),
-                            'metric_units': 'ms'
-                        })
-                    
-                    processed_data.append({
-                        'date': prev_day_obj,
-                        'metric_name': 'avg_hr',
-                        'metric_value': avg_hr2,
-                        'metric_units': 'bpm'
-                    })
-                    
-                    processed_data.append({
-                        'date': prev_day_obj,
-                        'metric_name': 'avg_hrv',
-                        'metric_value': avg_hrv2,
-                        'metric_units': 'ms'
-                    })
-                    
-                    processed_data.append({
-                        'date': prev_day_obj,
-                        'metric_name': 'avg_resp',
-                        'metric_value': avg_resp,
-                        'metric_units': 'breaths_per_min'
-                    })
-                    
-                    # Store sleep stage metrics from session data if they weren't in daily summary
-                    # We check if we already have data for this metric to avoid duplicates
-                    if day_rem_sleep > 0:
-                        exists = any(item.get('date') == prev_day_obj and item.get('metric_name') == 'rem_sleep' for item in processed_data)
-                        if not exists:
-                            processed_data.append({
-                                'date': prev_day_obj,
-                                'metric_name': 'rem_sleep',
-                                'metric_value': day_rem_sleep / 60,  # Convert seconds to minutes
-                                'metric_units': 'minutes'
-                            })
-                    
-                    if day_deep_sleep > 0:
-                        exists = any(item.get('date') == prev_day_obj and item.get('metric_name') == 'deep_sleep' for item in processed_data)
-                        if not exists:
-                            processed_data.append({
-                                'date': prev_day_obj,
-                                'metric_name': 'deep_sleep',
-                                'metric_value': day_deep_sleep / 60,  # Convert seconds to minutes
-                                'metric_units': 'minutes'
-                            })
-                    
-                    if day_light_sleep > 0:
-                        exists = any(item.get('date') == prev_day_obj and item.get('metric_name') == 'light_sleep' for item in processed_data)
-                        if not exists:
-                            processed_data.append({
-                                'date': prev_day_obj,
-                                'metric_name': 'light_sleep',
-                                'metric_value': day_light_sleep / 60,  # Convert seconds to minutes
-                                'metric_units': 'minutes'
-                            })
-                    
-                    if day_awake_time > 0:
-                        exists = any(item.get('date') == prev_day_obj and item.get('metric_name') == 'awake_time' for item in processed_data)
-                        if not exists:
-                            processed_data.append({
-                                'date': prev_day_obj,
-                                'metric_name': 'awake_time',
-                                'metric_value': day_awake_time / 60,  # Convert seconds to minutes
-                                'metric_units': 'minutes'
-                            })
-                    
-                    if long_hr > 0:
-                        processed_data.append({
-                            'date': prev_day_obj,
-                            'metric_name': 'long_hr',
-                            'metric_value': long_hr,
-                            'metric_units': 'bpm'
-                        })
-                    
-                    if long_hrv > 0:
-                        processed_data.append({
-                            'date': prev_day_obj,
-                            'metric_name': 'long_hrv',
-                            'metric_value': long_hrv,
-                            'metric_units': 'ms'
-                        })
-                    
-                    if long_resp > 0:
-                        processed_data.append({
-                            'date': prev_day_obj,
-                            'metric_name': 'long_resp',
-                            'metric_value': long_resp,
-                            'metric_units': 'breaths_per_min'
-                        })
-                    
-                    if long_efficiency > 0:
-                        processed_data.append({
-                            'date': prev_day_obj,
-                            'metric_name': 'long_efficiency',
-                            'metric_value': long_efficiency,
-                            'metric_units': 'score'
-                        })
-                    
-                    if long_readiness > 0:
-                        processed_data.append({
-                            'date': prev_day_obj,
-                            'metric_name': 'long_readiness',
-                            'metric_value': long_readiness,
-                            'metric_units': 'score'
-                        })
-                
-                # Reset for new day
-                day_hr_data = []
-                day_hrv_data = []
-                day_hr_data2 = []
-                day_hrv_data2 = []
-                day_avg_resp = []
-                day_time_asleep = []
-                day_rem_sleep = 0
-                day_deep_sleep = 0
-                day_light_sleep = 0
-                day_awake_time = 0
-                long_hr = 0
-                long_hrv = 0
-                long_resp = 0
-                long_efficiency = 0
-                long_readiness = 0
             
-            # Process heart rate data
-            if sleep.get('heart_rate') is not None:
-                hr_data = sleep['heart_rate'].get('items', [])
-                day_hr_data.extend([x for x in hr_data if x is not None])
-            
-            # Process HRV data
-            if sleep.get('hrv') is not None:
-                hrv_data = sleep['hrv'].get('items', [])
-                day_hrv_data.extend([x for x in hrv_data if x is not None])
-            
-            # Store weighted averages
             if (sleep.get('average_heart_rate') is not None and 
                 sleep.get('average_hrv') is not None and 
                 sleep.get('average_breath') is not None):
                 
-                day_hr_data2.append(sleep['average_heart_rate'])
-                day_hrv_data2.append(sleep['average_hrv'])
-                day_avg_resp.append(sleep['average_breath'])
-                day_time_asleep.append(sleep.get('time_in_bed', 0))
+                day_hr_data2[day].append(sleep['average_heart_rate'])
+                day_hrv_data2[day].append(sleep['average_hrv'])
+                day_avg_resp[day].append(sleep['average_breath'])
+                day_time_asleep[day].append(sleep.get('time_in_bed', 0))
             
             # Extract sleep stages from the individual sleep session
             if sleep.get('rem_sleep_duration') is not None:
-                day_rem_sleep += sleep['rem_sleep_duration']
+                day_to_rem_sleep[day] += sleep['rem_sleep_duration']
             
             if sleep.get('deep_sleep_duration') is not None:
-                day_deep_sleep += sleep['deep_sleep_duration']
+                day_to_deep_sleep[day] += sleep['deep_sleep_duration']
             
             if sleep.get('light_sleep_duration') is not None:
-                day_light_sleep += sleep['light_sleep_duration']
+                day_to_light_sleep[day] += sleep['light_sleep_duration']
             
             if sleep.get('awake_duration') is not None:
-                day_awake_time += sleep['awake_duration']
+                day_to_awake_time[day] += sleep['awake_duration']
             
             # Store info from the longest sleep session
             if sleep.get('type') == 'long_sleep':
                 if sleep.get('average_hrv') is not None:
-                    long_hrv = sleep['average_hrv']
+                    long_hrv[day] = sleep['average_hrv']
                 if sleep.get('average_heart_rate') is not None:
-                    long_hr = sleep['average_heart_rate']
+                    long_hr[day] = sleep['average_heart_rate']
                 if sleep.get('average_breath') is not None:
-                    long_resp = sleep['average_breath']
+                    long_resp[day] = sleep['average_breath']
                 if sleep.get('efficiency') is not None:
-                    long_efficiency = sleep['efficiency']
+                    long_efficiency[day] = sleep['efficiency']
                 if sleep.get('readiness', {}).get('score') is not None:
-                    long_readiness = sleep['readiness']['score']
-            
-            prev_day = day
+                    long_readiness[day] = sleep['readiness']['score']
         
-        # Process the last day's data
-        if prev_day is not None:
-            # Similar processing to within the loop
+        # Process metrics for each day
+        for day, rem_sleep_duration in day_to_rem_sleep.items():
+            # Convert day string to datetime
+            try:
+                day_obj = datetime.strptime(day, "%Y-%m-%d").date()
+            except ValueError:
+                current_app.logger.error(f"Invalid date format: {day}")
+                continue
+            
             avg_hr2 = 0
             avg_hrv2 = 0
             avg_resp = 0
             
-            if day_time_asleep:  # Make sure we have data
-                total_time_asleep = sum(day_time_asleep)
-                for i in range(len(day_hr_data2)):
-                    avg_hr2 += day_hr_data2[i] * (day_time_asleep[i] / total_time_asleep)
-                    avg_hrv2 += day_hrv_data2[i] * (day_time_asleep[i] / total_time_asleep)
-                    avg_resp += day_avg_resp[i] * (day_time_asleep[i] / total_time_asleep)
-            
-                # Convert previous day string to datetime
-                try:
-                    prev_day_obj = datetime.strptime(prev_day, "%Y-%m-%d").date()
-                except ValueError:
-                    current_app.logger.error(f"Invalid date format: {prev_day}")
-                    return processed_data
-            
-                # Store metrics for the previous day
-                if day_hr_data:
+            # Process heart rate and HRV data
+            if day_time_asleep[day]:  # Make sure we have data
+                total_time_asleep = sum(day_time_asleep[day])
+                for i in range(len(day_hr_data2[day])):
+                    avg_hr2 += day_hr_data2[day][i] * (day_time_asleep[day][i] / total_time_asleep)
+                    avg_hrv2 += day_hrv_data2[day][i] * (day_time_asleep[day][i] / total_time_asleep)
+                    avg_resp += day_avg_resp[day][i] * (day_time_asleep[day][i] / total_time_asleep)
+                
+                # Store heart rate metrics
+                if day_hr_data[day]:
                     processed_data.append({
-                        'date': prev_day_obj,
+                        'date': day_obj,
                         'metric_name': 'avg_hr_alt',
-                        'metric_value': sum(day_hr_data) / len(day_hr_data),
+                        'metric_value': sum(day_hr_data[day]) / len(day_hr_data[day]) if day_hr_data[day] else 0,
                         'metric_units': 'bpm'
                     })
                 
-                if day_hrv_data:
+                if day_hrv_data[day]:
                     processed_data.append({
-                        'date': prev_day_obj,
+                        'date': day_obj,
                         'metric_name': 'avg_hrv_alt',
-                        'metric_value': sum(day_hrv_data) / len(day_hrv_data),
+                        'metric_value': sum(day_hrv_data[day]) / len(day_hrv_data[day]) if day_hrv_data[day] else 0,
                         'metric_units': 'ms'
                     })
                 
                 processed_data.append({
-                    'date': prev_day_obj,
+                    'date': day_obj,
                     'metric_name': 'avg_hr',
                     'metric_value': avg_hr2,
                     'metric_units': 'bpm'
                 })
                 
                 processed_data.append({
-                    'date': prev_day_obj,
+                    'date': day_obj,
                     'metric_name': 'avg_hrv',
                     'metric_value': avg_hrv2,
                     'metric_units': 'ms'
                 })
                 
                 processed_data.append({
-                    'date': prev_day_obj,
+                    'date': day_obj,
                     'metric_name': 'avg_resp',
                     'metric_value': avg_resp,
                     'metric_units': 'breaths_per_min'
                 })
-                
-                # Store sleep stage metrics from session data if they weren't in daily summary
-                # We check if we already have data for this metric to avoid duplicates
-                if day_rem_sleep > 0:
-                    exists = any(item.get('date') == prev_day_obj and item.get('metric_name') == 'rem_sleep' for item in processed_data)
-                    if not exists:
-                        processed_data.append({
-                            'date': prev_day_obj,
-                            'metric_name': 'rem_sleep',
-                            'metric_value': day_rem_sleep / 60,  # Convert seconds to minutes
-                            'metric_units': 'minutes'
-                        })
-                
-                if day_deep_sleep > 0:
-                    exists = any(item.get('date') == prev_day_obj and item.get('metric_name') == 'deep_sleep' for item in processed_data)
-                    if not exists:
-                        processed_data.append({
-                            'date': prev_day_obj,
-                            'metric_name': 'deep_sleep',
-                            'metric_value': day_deep_sleep / 60,  # Convert seconds to minutes
-                            'metric_units': 'minutes'
-                        })
-                
-                if day_light_sleep > 0:
-                    exists = any(item.get('date') == prev_day_obj and item.get('metric_name') == 'light_sleep' for item in processed_data)
-                    if not exists:
-                        processed_data.append({
-                            'date': prev_day_obj,
-                            'metric_name': 'light_sleep',
-                            'metric_value': day_light_sleep / 60,  # Convert seconds to minutes
-                            'metric_units': 'minutes'
-                        })
-                
-                if day_awake_time > 0:
-                    exists = any(item.get('date') == prev_day_obj and item.get('metric_name') == 'awake_time' for item in processed_data)
-                    if not exists:
-                        processed_data.append({
-                            'date': prev_day_obj,
-                            'metric_name': 'awake_time',
-                            'metric_value': day_awake_time / 60,  # Convert seconds to minutes
-                            'metric_units': 'minutes'
-                        })
-                
-                if long_hr > 0:
+            
+            # Store sleep stage metrics from session data if they weren't in daily summary
+            if rem_sleep_duration > 0:
+                exists = any(item.get('date') == day_obj and item.get('metric_name') == 'rem_sleep' for item in processed_data)
+                if not exists:
                     processed_data.append({
-                        'date': prev_day_obj,
-                        'metric_name': 'long_hr',
-                        'metric_value': long_hr,
-                        'metric_units': 'bpm'
+                        'date': day_obj,
+                        'metric_name': 'rem_sleep',
+                        'metric_value': rem_sleep_duration / 60,  # Convert seconds to minutes
+                        'metric_units': 'minutes'
                     })
-                
-                if long_hrv > 0:
+            
+            if day_to_deep_sleep[day] > 0:
+                exists = any(item.get('date') == day_obj and item.get('metric_name') == 'deep_sleep' for item in processed_data)
+                if not exists:
                     processed_data.append({
-                        'date': prev_day_obj,
-                        'metric_name': 'long_hrv',
-                        'metric_value': long_hrv,
-                        'metric_units': 'ms'
+                        'date': day_obj,
+                        'metric_name': 'deep_sleep',
+                        'metric_value': day_to_deep_sleep[day] / 60,  # Convert seconds to minutes
+                        'metric_units': 'minutes'
                     })
-                
-                if long_resp > 0:
+            
+            if day_to_light_sleep[day] > 0:
+                exists = any(item.get('date') == day_obj and item.get('metric_name') == 'light_sleep' for item in processed_data)
+                if not exists:
                     processed_data.append({
-                        'date': prev_day_obj,
-                        'metric_name': 'long_resp',
-                        'metric_value': long_resp,
-                        'metric_units': 'breaths_per_min'
+                        'date': day_obj,
+                        'metric_name': 'light_sleep',
+                        'metric_value': day_to_light_sleep[day] / 60,  # Convert seconds to minutes
+                        'metric_units': 'minutes'
                     })
-                
-                if long_efficiency > 0:
+            
+            if day_to_awake_time[day] > 0:
+                exists = any(item.get('date') == day_obj and item.get('metric_name') == 'awake_time' for item in processed_data)
+                if not exists:
                     processed_data.append({
-                        'date': prev_day_obj,
-                        'metric_name': 'long_efficiency',
-                        'metric_value': long_efficiency,
-                        'metric_units': 'score'
+                        'date': day_obj,
+                        'metric_name': 'awake_time',
+                        'metric_value': day_to_awake_time[day] / 60,  # Convert seconds to minutes
+                        'metric_units': 'minutes'
                     })
-                
-                if long_readiness > 0:
-                    processed_data.append({
-                        'date': prev_day_obj,
-                        'metric_name': 'long_readiness',
-                        'metric_value': long_readiness,
-                        'metric_units': 'score'
-                    })
+            
+            # Add long session data if available
+            if day in long_hr:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'long_hr',
+                    'metric_value': long_hr[day],
+                    'metric_units': 'bpm'
+                })
+            
+            if day in long_hrv:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'long_hrv',
+                    'metric_value': long_hrv[day],
+                    'metric_units': 'ms'
+                })
+            
+            if day in long_resp:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'long_resp',
+                    'metric_value': long_resp[day],
+                    'metric_units': 'breaths_per_min'
+                })
+            
+            if day in long_efficiency:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'long_efficiency',
+                    'metric_value': long_efficiency[day],
+                    'metric_units': 'score'
+                })
+            
+            if day in long_readiness:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'long_readiness',
+                    'metric_value': long_readiness[day],
+                    'metric_units': 'score'
+                })
         
         return processed_data
     
     def _store_data(self, processed_data, source):
         """Store processed data in the database"""
+        records_added = 0
+        records_updated = 0
+        metrics_by_type = {}
+        dates_range = set()
+        
         for item in processed_data:
-            # Check if record already exists
-            existing = HealthData.query.filter_by(
-                date=item['date'],
+            # Track metrics for reporting
+            metric_name = item.get('metric_name', 'unknown')
+            if metric_name not in metrics_by_type:
+                metrics_by_type[metric_name] = 0
+            metrics_by_type[metric_name] += 1
+            
+            # Track date range
+            if 'date' in item:
+                dates_range.add(item['date'])
+            
+            # Get or create the DataType
+            data_type = DataType.query.filter_by(
                 source=source,
                 metric_name=item['metric_name']
+            ).first()
+            
+            if not data_type:
+                data_type = DataType(
+                    source=source,
+                    metric_name=item['metric_name'],
+                    metric_units=item.get('metric_units'),
+                    source_type='api' if 'oura' in source else 'unknown'
+                )
+                db.session.add(data_type)
+                db.session.flush()  # Flush to get the ID
+            
+            # Check if record already exists using the data_type_id and date
+            existing = HealthData.query.filter_by(
+                date=item['date'],
+                data_type_id=data_type.id
             ).first()
             
             if existing:
                 # Update existing record
                 existing.metric_value = item['metric_value']
-                existing.metric_units = item.get('metric_units')
+                records_updated += 1
             else:
                 # Create new record
                 new_data = HealthData(
                     date=item['date'],
-                    source=source,
-                    metric_name=item['metric_name'],
-                    metric_value=item['metric_value'],
-                    metric_units=item.get('metric_units')
+                    data_type=data_type,
+                    metric_value=item['metric_value']
                 )
                 db.session.add(new_data)
+                records_added += 1
         
+        # Commit changes to database
         db.session.commit()
+        
+        # Log detailed stats about the import
+        date_range_str = ""
+        if dates_range:
+            min_date = min(dates_range)
+            max_date = max(dates_range)
+            date_range_str = f" (date range: {min_date} to {max_date})"
+        
+        current_app.logger.info(f"Imported {source} data: {records_added} new records, {records_updated} updated records{date_range_str}")
+        
+        # Log breakdown by metric type
+        if metrics_by_type:
+            metrics_breakdown = ", ".join([f"{metric}: {count}" for metric, count in metrics_by_type.items()])
+            current_app.logger.info(f"Metrics breakdown: {metrics_breakdown}")
+        
+        # Update the data source last import date
+        self._update_data_source(source)
+        
+        return processed_data
     
     def _update_data_source(self, source_name):
-        """Update or create a data source record"""
-        source = DataSource.query.filter_by(name=source_name).first()
-        
-        if not source:
-            source = DataSource(
-                name=source_name,
-                type='api',
-                last_import=datetime.now()
-            )
-            db.session.add(source)
-        else:
-            source.last_import = datetime.now()
-        
-        db.session.commit()
+        """Update last import timestamp for data types from this source"""
+        # Ensure we're using the base source name for Oura data
+        if source_name.startswith('oura_'):
+            # Strip the suffix and use just 'oura'
+            source_name = 'oura'
+            
+        DataType.update_last_import(source_name)
     
     def import_activity_data(self, start_date, end_date):
         """Import activity data from Oura API"""
@@ -531,14 +418,14 @@ class OuraImporter:
         }
         
         # Get daily activity data
-        daily_activity_data = self._get_data("/v2/usercollection/daily_activity", params)
+        activity_data = self._get_data("/v2/usercollection/daily_activity", params)
         
         # Process and store the data
-        processed_data = self._process_activity_data(daily_activity_data)
+        processed_data = self._process_activity_data(activity_data)
         self._store_data(processed_data, 'oura')
         
         # Update data source record
-        self._update_data_source('oura_activity')
+        self._update_data_source('oura')
         
         return processed_data
         
@@ -660,40 +547,9 @@ class OuraImporter:
                     })
         
         return processed_data
-    
-    def _infer_units(self, metric_name):
-        """Infer units for a metric based on its name."""
-        if 'calories' in metric_name:
-            return 'kcal'
-        elif 'steps' in metric_name:
-            return 'count'
-        elif 'distance' in metric_name:
-            return 'meters'
-        elif 'duration' in metric_name or 'time' in metric_name:
-            return 'seconds'
-        elif 'score' in metric_name:
-            return 'score'
-        elif 'hr' in metric_name and 'hrv' not in metric_name:
-            return 'bpm'
-        elif 'hrv' in metric_name:
-            return 'ms'
-        elif 'breath' in metric_name or 'resp' in metric_name:
-            return 'breaths_per_min'
-        elif 'tag' in metric_name:
-            return 'count'
-        else:
-            return None
 
     def import_tags_data(self, start_date, end_date):
-        """Import tags data from Oura API
-        
-        Args:
-            start_date: Start date string (YYYY-MM-DD)
-            end_date: End date string (YYYY-MM-DD)
-            
-        Returns:
-            List of processed tag data
-        """
+        """Import tags data from Oura API"""
         params = {
             "start_date": start_date,
             "end_date": end_date
@@ -714,25 +570,20 @@ class OuraImporter:
         # Process and store the data
         processed_data = self._process_tags_data(tags_data, start_date_obj, end_date_obj)
         if processed_data:
-            self._store_data(processed_data, 'oura')
+            self._store_data(processed_data, 'oura')  # Always use 'oura' as the source
             
             # Update data source record
-            self._update_data_source('oura_tags')
+            self._update_data_source('oura')  # Use just 'oura', not 'oura_tags'
         
         return processed_data
     
     def _process_tags_data(self, tags_data, start_date=None, end_date=None):
-        """Process raw Oura tag data into a format for our database
-        
-        Args:
-            tags_data: Raw tag data from Oura API
-            start_date: Start date for the data range (optional)
-            end_date: End date for the data range (optional)
-            
-        Returns:
-            List of processed tag data
-        """
+        """Process raw Oura tags data into a format for our database"""
         processed_data = []
+        
+        # Check if we have valid data
+        if not tags_data or 'data' not in tags_data or not tags_data['data']:
+            return processed_data
         
         # Track unique tag types and their occurrence dates
         unique_tags = set()
@@ -773,17 +624,15 @@ class OuraImporter:
             try:
                 # Query existing tag types from the database
                 existing_tags = db.session.query(
-                    HealthData.metric_name
+                    DataType.metric_name
                 ).filter(
-                    HealthData.metric_name.like('tag_%'),
-                    HealthData.source == 'oura'
+                    DataType.metric_name.like('tag_%'),
+                    DataType.source == 'oura'
                 ).distinct().all()
                 
-                # Extract tag names from metric_names
-                for tag_record in existing_tags:
-                    if tag_record.metric_name.startswith('tag_'):
-                        tag_name = tag_record.metric_name[4:]  # Remove 'tag_' prefix
-                        unique_tags.add(tag_name)
+                # Add existing tag types to our set
+                for tag in existing_tags:
+                    unique_tags.add(tag.metric_name.replace('tag_', ''))
             except Exception as e:
                 current_app.logger.error(f"Error querying existing tag types: {str(e)}")
         
@@ -832,4 +681,100 @@ class OuraImporter:
                         'metric_units': 'count'
                     })
         
-        return processed_data 
+        return processed_data
+    
+    def diagnostic_check(self, start_date, end_date):
+        """Run diagnostic checks to identify potential issues with data import"""
+        diagnostics = {
+            "api_status": "unknown",
+            "date_range": f"{start_date} to {end_date}",
+            "endpoints_checked": {},
+            "data_counts": {}
+        }
+        
+        # Check API connectivity
+        try:
+            response = requests.get(f"{self.api_base_url}/v2/usercollection/personal_info", 
+                                   headers=self.auth_header)
+            diagnostics["api_status"] = f"HTTP {response.status_code}"
+            if response.status_code == 200:
+                user_info = response.json()
+                diagnostics["user_info"] = {
+                    "email": user_info.get('data', {}).get('email', 'unknown')
+                }
+        except Exception as e:
+            diagnostics["api_status"] = f"Error: {str(e)}"
+            
+        # Check each endpoint
+        endpoints = [
+            "/v2/usercollection/daily_sleep",
+            "/v2/usercollection/sleep",
+            "/v2/usercollection/daily_activity",
+            "/v2/usercollection/enhanced_tag"
+        ]
+        
+        params = {
+            "start_date": start_date,
+            "end_date": end_date
+        }
+        
+        for endpoint in endpoints:
+            try:
+                response = requests.get(f"{self.api_base_url}{endpoint}", 
+                                      headers=self.auth_header, 
+                                      params=params)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    data_count = len(data.get('data', []))
+                    diagnostics["endpoints_checked"][endpoint] = {
+                        "status": response.status_code,
+                        "data_count": data_count
+                    }
+                    diagnostics["data_counts"][endpoint.split('/')[-1]] = data_count
+                else:
+                    diagnostics["endpoints_checked"][endpoint] = {
+                        "status": response.status_code,
+                        "message": response.text
+                    }
+            except Exception as e:
+                diagnostics["endpoints_checked"][endpoint] = {
+                    "status": "error",
+                    "message": str(e)
+                }
+                
+        # Check database counts
+        try:
+            sleep_count = db.session.query(HealthData).join(
+                DataType, HealthData.data_type_id == DataType.id
+            ).filter(
+                DataType.source == 'oura',
+                DataType.metric_name.in_(['sleep_score', 'rem_sleep', 'deep_sleep'])
+            ).count()
+            
+            activity_count = db.session.query(HealthData).join(
+                DataType, HealthData.data_type_id == DataType.id
+            ).filter(
+                DataType.source == 'oura',
+                DataType.metric_name.in_(['activity_score', 'steps'])
+            ).count()
+            
+            tag_count = db.session.query(HealthData).join(
+                DataType, HealthData.data_type_id == DataType.id
+            ).filter(
+                DataType.source == 'oura',
+                DataType.metric_name.like('tag_%')
+            ).count()
+            
+            diagnostics["database_counts"] = {
+                "sleep": sleep_count,
+                "activity": activity_count,
+                "tags": tag_count
+            }
+        except Exception as e:
+            diagnostics["database_counts"] = {
+                "error": str(e)
+            }
+            
+        current_app.logger.info(f"Oura diagnostics: {json.dumps(diagnostics, indent=2, default=str)}")
+        return diagnostics 

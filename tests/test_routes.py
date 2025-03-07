@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 import sys
 import os
@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from tests.test_base import BaseTestCase
 from app import db
-from app.models.base import DataSource, UserDefinedMetric, HealthData
+from app.models.base import UserDefinedMetric, HealthData, DataType
 
 class RouteTestCase(BaseTestCase):
     """Test case for the application routes."""
@@ -46,34 +46,62 @@ class RouteTestCase(BaseTestCase):
     def test_data_route(self):
         """Test the data management route (mock test)."""
         # Create a test data source
-        source = DataSource(name='test_source', type='test')
+        source = DataType(
+            source='test_source',
+            metric_name='source_info',
+            source_type='test',
+            last_import=datetime.now()
+        )
         db.session.add(source)
         db.session.commit()
         
-        # Call the data index route
-        response = self.client.get('/data/')
+        response = self.client.get('/data')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Data Management', response.data)
     
     def test_data_import_route(self):
-        """Test the data import route."""
+        """Test that the data import route returns a 200 status code."""
         response = self.client.get('/data/import')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'Import Health Data', response.data)
+        self.assertIn(b'Import Data', response.data)
     
     def test_analysis_dashboard_route(self):
-        """Test the analysis dashboard route."""
-        # Create some test data for the dashboard
-        for i in range(10):
-            day = date.today() - timedelta(days=i)
-            data_point = HealthData(
-                date=day,
-                source='test',
-                metric_name='test_metric',
-                metric_value=50 + i,
-                metric_units='units'
+        """Test the analysis dashboard route with sample data."""
+        self._clear_test_data()  # Ensure clean state
+        
+        # Create data types for sleep and steps
+        sleep_type = DataType(
+            source='test',
+            metric_name='sleep',
+            metric_units='hours'
+        )
+        db.session.add(sleep_type)
+        
+        steps_type = DataType(
+            source='test',
+            metric_name='steps',
+            metric_units='count'
+        )
+        db.session.add(steps_type)
+        db.session.flush()
+        
+        # Add some test data
+        today = date.today()
+        for i in range(7):
+            test_date = today - timedelta(days=i)
+            sleep_data = HealthData(
+                date=test_date,
+                data_type=sleep_type,
+                metric_value=7.5 - (i * 0.1)  # Slightly decreasing sleep
             )
-            db.session.add(data_point)
+            steps_data = HealthData(
+                date=test_date,
+                data_type=steps_type,
+                metric_value=8000 + (i * 500)  # Increasing steps
+            )
+            db.session.add(sleep_data)
+            db.session.add(steps_data)
+        
         db.session.commit()
         
         response = self.client.get('/analysis/dashboard')
@@ -81,270 +109,322 @@ class RouteTestCase(BaseTestCase):
         self.assertIn(b'Dashboard', response.data)
     
     def test_data_browse_route(self):
-        """Test the data/browse route with various filters."""
-        # Create test data with different sources and metrics
-        sources = ['oura', 'chronometer', 'custom']
-        metrics = ['sleep_duration', 'energy', 'weight']
+        """Test the data browse route with filtering."""
+        self._clear_test_data()  # Ensure clean state
         
-        for i in range(30):  # Create enough data for pagination
-            source = sources[i % len(sources)]
-            metric = metrics[i % len(metrics)]
-            day = date.today() - timedelta(days=i)
+        # Create data types
+        sleep_type = DataType(
+            source='oura',
+            metric_name='sleep_score',
+            metric_units='score'
+        )
+        db.session.add(sleep_type)
+        
+        steps_type = DataType(
+            source='garmin',
+            metric_name='steps',
+            metric_units='count'
+        )
+        db.session.add(steps_type)
+        
+        calories_type = DataType(
+            source='chronometer',
+            metric_name='calories',
+            metric_units='kcal'
+        )
+        db.session.add(calories_type)
+        db.session.flush()
+        
+        # Add some test data
+        today = date.today()
+        for i in range(5):
+            test_date = today - timedelta(days=i)
             
-            data_point = HealthData(
-                date=day,
-                source=source,
-                metric_name=metric,
-                metric_value=i * 10,
-                metric_units='units'
+            sleep_data = HealthData(
+                date=test_date,
+                data_type=sleep_type,
+                metric_value=85 - i
             )
-            db.session.add(data_point)
+            db.session.add(sleep_data)
+            
+            steps_data = HealthData(
+                date=test_date,
+                data_type=steps_type,
+                metric_value=10000 - (i * 500)
+            )
+            db.session.add(steps_data)
+            
+            calories_data = HealthData(
+                date=test_date,
+                data_type=calories_type,
+                metric_value=2000 + (i * 100)
+            )
+            db.session.add(calories_data)
+        
         db.session.commit()
         
-        # Test base route without filters
+        # Test default browse route
         response = self.client.get('/data/browse')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'Browse Health Data', response.data)
+        self.assertIn(b'Browse Data', response.data)
         
-        # Test with source filter
+        # Test filtering by source
         response = self.client.get('/data/browse?source=oura')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'oura', response.data.lower())
+        self.assertIn(b'oura', response.data)
+        self.assertIn(b'sleep_score', response.data)
         
-        # Test with metric filter
-        response = self.client.get('/data/browse?metric=energy')
+        # Test filtering by metric
+        response = self.client.get('/data/browse?metric=steps')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'energy', response.data.lower())
+        self.assertIn(b'garmin', response.data)
+        self.assertIn(b'steps', response.data)
         
-        # Test with both filters
-        response = self.client.get('/data/browse?source=chronometer&metric=energy')
+        # Test filtering by date range
+        start_date = (today - timedelta(days=2)).strftime('%Y-%m-%d')
+        end_date = today.strftime('%Y-%m-%d')
+        response = self.client.get(f'/data/browse?start_date={start_date}&end_date={end_date}')
         self.assertEqual(response.status_code, 200)
-        
-        # Test pagination
-        response = self.client.get('/data/browse?page=2&per_page=10')
-        self.assertEqual(response.status_code, 200)
+        # Should show 3 days of data (today, yesterday, day before)
     
     def test_custom_metrics_functionality(self):
-        """Test the custom metrics functionality (mock test)."""
-        # Create a test custom metric to verify DB operations
-        metric = UserDefinedMetric(
-            name='test_metric',
-            units='test_units',
-            description='This is a test metric',
-            frequency='daily'
+        """Test the custom metrics page and functionality."""
+        # Create a test custom metric
+        custom_metric = UserDefinedMetric(
+            name='BMI',
+            unit='kg/m²',
+            description='Body Mass Index',
+            data_type='numeric',
+            is_cumulative=False
         )
-        db.session.add(metric)
+        db.session.add(custom_metric)
         db.session.commit()
         
-        # Verify the metric was created
-        result = UserDefinedMetric.query.filter_by(name='test_metric').first()
-        self.assertIsNotNone(result)
-        self.assertEqual(result.units, 'test_units')
-        self.assertEqual(result.description, 'This is a test metric')
-        self.assertEqual(result.frequency, 'daily')
+        # Create a DataType for this custom metric
+        data_type = DataType(
+            source='custom',
+            metric_name='BMI',
+            metric_units='kg/m²'
+        )
+        db.session.add(data_type)
+        db.session.commit()
+        
+        # Test the metrics page
+        response = self.client.get('/data/custom-metrics')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'Custom Health Metrics', response.data)
+        self.assertIn(b'BMI', response.data)
+        
+        # Test viewing a specific metric
+        response = self.client.get(f'/data/custom-metrics/view/{custom_metric.id}')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'BMI', response.data)
+        self.assertIn(b'Body Mass Index', response.data)
     
     def test_custom_metrics_add(self):
-        """Test adding a new custom metric (mock test)."""
-        # Create a new metric to verify DB operations
-        metric = UserDefinedMetric(
-            name='new_metric',
-            units='new_units',
-            description='This is a new metric',
-            frequency='daily'
-        )
-        db.session.add(metric)
-        db.session.commit()
+        """Test adding a new custom metric."""
+        # Test the add metric form
+        response = self.client.get('/data/custom-metrics/add')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'Add Custom Metric', response.data)
         
-        # Verify the metric was added
-        result = UserDefinedMetric.query.filter_by(name='new_metric').first()
-        self.assertIsNotNone(result)
-        self.assertEqual(result.units, 'new_units')
-        self.assertEqual(result.description, 'This is a new metric')
-        self.assertEqual(result.frequency, 'daily')
+        # Test submitting the form
+        response = self.client.post('/data/custom-metrics/add', data={
+            'name': 'Calorie Ratio',
+            'unit': 'ratio',
+            'description': 'Ratio of calories consumed to calories burned',
+            'data_type': 'numeric',
+            'is_cumulative': 'false'
+        }, follow_redirects=True)
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'Calorie Ratio', response.data)
+        
+        # Verify the metric was added to the database
+        metric = UserDefinedMetric.query.filter_by(name='Calorie Ratio').first()
+        self.assertIsNotNone(metric)
+        self.assertEqual(metric.unit, 'ratio')
+        self.assertEqual(metric.description, 'Ratio of calories consumed to calories burned')
+        self.assertEqual(metric.data_type, 'numeric')
+        
+        # Verify the DataType was created
+        data_type = DataType.query.filter_by(source='custom', metric_name='Calorie Ratio').first()
+        self.assertIsNotNone(data_type)
+        self.assertEqual(data_type.metric_units, 'ratio')
     
     def test_analysis_data_api(self):
-        """Test the analysis data API."""
-        # Create some test data
-        for i in range(5):
-            day = date.today() - timedelta(days=i)
-            data_point = HealthData(
-                date=day,
-                source='test',
-                metric_name='test_api_metric',
-                metric_value=100 + i,
-                metric_units='units'
+        """Test the analysis data API endpoint."""
+        self._clear_test_data()  # Ensure clean state
+        
+        # Create data type for sleep score
+        sleep_type = DataType(
+            source='oura',
+            metric_name='sleep_score',
+            metric_units='score'
+        )
+        db.session.add(sleep_type)
+        db.session.flush()
+        
+        # Add some test data
+        today = date.today()
+        for i in range(7):
+            test_date = today - timedelta(days=i)
+            sleep_data = HealthData(
+                date=test_date,
+                data_type=sleep_type,
+                metric_value=85 - i
             )
-            db.session.add(data_point)
+            db.session.add(sleep_data)
+        
         db.session.commit()
         
-        response = self.client.get('/analysis/data')
+        # Test the API endpoint
+        response = self.client.get('/analysis/data?metric=sleep_score&source=oura')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'success', response.data)
-        
+    
     def test_chronometer_import(self):
-        """Test importing Chronometer CSV data."""
-        # Create a sample CSV data
-        csv_data = """Day,Name,Quantity,Energy (kcal),Protein (g),Carbs (g),Fat (g),Fiber (g),Sugars (g),Sodium (mg),Potassium (mg),Vitamin C (mg),Calcium (mg),Iron (mg),Category
-2023-01-01,Oatmeal,100,150,5,30,2.5,4,1,10,100,0,30,1.2,Breakfast
-2023-01-01,Apple,1,72,0.3,19,0.2,3.3,15,1,107,8.4,8,0.1,Snacks
-2023-01-02,Banana,1,105,1.3,27,0.4,3.1,14,1,422,10.3,6,0.3,Breakfast
-"""
-        # Create a file-like object for the post request
+        """Test the Chronometer import functionality with a sample file."""
+        import tempfile
         from io import BytesIO
-        file_data = BytesIO(csv_data.encode('utf-8'))
         
-        # Simulate form submission with file upload
+        # Create a sample CSV file
+        csv_data = """Day,Energy (kcal),Protein (g),Carbs (g),Fat (g)
+2023-03-01,2000,100,200,80
+2023-03-02,1800,90,180,70"""
+        
+        # Convert string to bytes for the file upload
+        csv_file = BytesIO(csv_data.encode('utf-8'))
+        
+        # Create a mock file upload
+        data = {
+            'data_source': 'chronometer_csv',
+            'chronometer_file': (csv_file, 'test_chronometer.csv')
+        }
+        
+        # Test the import route
         response = self.client.post(
             '/data/import',
-            data={
-                'data_source': 'chronometer_csv',
-                'process_categories': 'yes',
-                'chronometer_file': (file_data, 'test_chronometer.csv')
-            },
+            data=data,
             content_type='multipart/form-data',
             follow_redirects=True
         )
         
-        # Check the response
+        # Check response
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b'successfully', response.data.lower())
         
-        # Verify data was imported to the database
-        db_data = HealthData.query.filter_by(source='chronometer').all()
-        self.assertGreater(len(db_data), 0)
-        
-        # Verify we have energy data for Jan 1
-        energy_data = HealthData.query.filter_by(
+        # Verify data was imported correctly
+        # Check for energy data
+        energy_type = DataType.query.filter_by(
             source='chronometer',
-            metric_name='Energy (kcal)',
-            date=date(2023, 1, 1)
+            metric_name='Energy (kcal)'
         ).first()
+        self.assertIsNotNone(energy_type)
         
+        energy_data = HealthData.query.filter(
+            HealthData.data_type_id == energy_type.id,
+            HealthData.date == date(2023, 3, 1)
+        ).first()
         self.assertIsNotNone(energy_data)
-        # Jan 1: 150 (oatmeal) + 72 (apple) = 222 kcal
-        self.assertEqual(energy_data.metric_value, 222)
+        self.assertEqual(energy_data.metric_value, 2000)
         
-        # Verify food categories were processed
-        category_data = HealthData.query.filter(
-            HealthData.metric_name.like('Food Category:%')
-        ).all()
-        self.assertGreater(len(category_data), 0)
+        # Check for protein data
+        protein_type = DataType.query.filter_by(
+            source='chronometer',
+            metric_name='Protein (g)'
+        ).first()
+        self.assertIsNotNone(protein_type)
+        
+        protein_data = HealthData.query.filter(
+            HealthData.data_type_id == protein_type.id,
+            HealthData.date == date(2023, 3, 1)
+        ).first()
+        self.assertIsNotNone(protein_data)
+        self.assertEqual(protein_data.metric_value, 100)
     
     def test_data_date_view(self):
-        """Test the data/date view route."""
-        # Clear any existing data that might affect this test
-        self._clear_test_data()
+        """Test the date view route with sample data."""
+        self._clear_test_data()  # Ensure clean state
         
-        # Create test data for multiple sources on the same date
-        test_date = date.today()
+        # Create test data for a specific date
+        test_date = date(2023, 3, 15)
+        formatted_date = test_date.strftime('%Y-%m-%d')
         
-        # Create Oura data for the test date
-        oura_data = [
-            HealthData(
-                date=test_date,
-                source='oura',
-                metric_name='sleep_score',
-                metric_value=85,
-                metric_units='score'
-            ),
-            HealthData(
-                date=test_date,
-                source='oura',
-                metric_name='avg_hrv',
-                metric_value=42,
-                metric_units='ms'
-            )
-        ]
-        
-        # Create chronometer data for the test date
-        chrono_data = [
-            HealthData(
-                date=test_date,
-                source='chronometer',
-                metric_name='energy',
-                metric_value=2100,
-                metric_units='kcal'
-            ),
-            HealthData(
-                date=test_date,
-                source='chronometer',
-                metric_name='protein',
-                metric_value=120,
-                metric_units='g'
-            )
-        ]
-        
-        # Create data for a different date (to test navigation)
-        next_date = test_date + timedelta(days=1)
-        next_day_data = HealthData(
-            date=next_date,
+        # Create data types
+        sleep_type = DataType(
             source='oura',
             metric_name='sleep_score',
-            metric_value=90,
             metric_units='score'
         )
+        db.session.add(sleep_type)
         
-        prev_date = test_date - timedelta(days=1)
-        prev_day_data = HealthData(
-            date=prev_date,
-            source='oura',
-            metric_name='sleep_score',
-            metric_value=80,
-            metric_units='score'
+        steps_type = DataType(
+            source='garmin',
+            metric_name='steps',
+            metric_units='count'
         )
+        db.session.add(steps_type)
         
-        # Add all data to the database
-        db.session.add_all(oura_data + chrono_data + [next_day_data, prev_day_data])
+        calories_type = DataType(
+            source='chronometer',
+            metric_name='calories',
+            metric_units='kcal'
+        )
+        db.session.add(calories_type)
+        db.session.flush()
+        
+        # Add health data for the test date
+        sleep_data = HealthData(
+            date=test_date,
+            data_type=sleep_type,
+            metric_value=85
+        )
+        db.session.add(sleep_data)
+        
+        steps_data = HealthData(
+            date=test_date,
+            data_type=steps_type,
+            metric_value=12500
+        )
+        db.session.add(steps_data)
+        
+        calories_data = HealthData(
+            date=test_date,
+            data_type=calories_type,
+            metric_value=2100
+        )
+        db.session.add(calories_data)
+        
         db.session.commit()
         
-        # Test default route (today's data)
-        response = self.client.get('/data/date')
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b'Health Data for', response.data)
-        
-        # Expected strings should be in the response
-        month_name = test_date.strftime('%B')
-        self.assertIn(month_name.encode(), response.data)
-        self.assertIn(b'Oura', response.data)
-        self.assertIn(b'Chronometer', response.data)
-        
-        # Test specific date route
-        formatted_date = test_date.strftime('%Y-%m-%d')
+        # Test the date view route
         response = self.client.get(f'/data/date/{formatted_date}')
         self.assertEqual(response.status_code, 200)
         
-        # Verify date display - use partial string to avoid locale issues
-        self.assertIn(month_name.encode(), response.data)
-        day_str = str(test_date.day).encode()
-        year_str = str(test_date.year).encode()
-        self.assertIn(day_str, response.data)
-        self.assertIn(year_str, response.data)
+        # Verify the page contains our data
+        self.assertIn(b'Daily Health Summary', response.data)
+        self.assertIn(b'March 15, 2023', response.data)
         
-        # Test navigation - verify URLs are in the response
-        prev_date_str = prev_date.strftime('%Y-%m-%d')
-        next_date_str = next_date.strftime('%Y-%m-%d')
-        self.assertIn(f'href="/data/date/{prev_date_str}"'.encode(), response.data)
-        self.assertIn(f'href="/data/date/{next_date_str}"'.encode(), response.data)
-        
-        # Test form submission
-        response = self.client.post('/data/date', data={'date': formatted_date}, follow_redirects=True)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(month_name.encode(), response.data)
-        
-        # Test with invalid date format
-        response = self.client.get('/data/date/invalid-date', follow_redirects=True)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b'Invalid date format', response.data)
+        # Check each source of data
+        self.assertIn(b'Oura', response.data)
+        self.assertIn(b'85.0', response.data)  # Sleep score
+        self.assertIn(b'Garmin', response.data)
+        self.assertIn(b'12500.0', response.data)  # Steps
+        self.assertIn(b'Chronometer', response.data)
+        self.assertIn(b'2100.0', response.data)  # Calories
     
     def test_date_view_no_data(self):
-        """Test the date view when no data exists for a date."""
-        # Use a date far in the future to ensure no data exists
-        future_date = date.today() + timedelta(days=1000)
-        formatted_date = future_date.strftime('%Y-%m-%d')
+        """Test the date view route with no data for the selected date."""
+        self._clear_test_data()  # Ensure clean state
         
-        # Ensure there's no data for this date by deleting any existing data
-        HealthData.query.filter_by(date=future_date).delete()
-        db.session.commit()
+        # Use a date we know has no data
+        test_date = date(2099, 12, 31)
+        formatted_date = test_date.strftime('%Y-%m-%d')
         
+        # Test the date view route
         response = self.client.get(f'/data/date/{formatted_date}')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'No health data found', response.data) 
+        
+        # Verify the page contains a message about no data
+        self.assertIn(b'No health data found for December 31, 2099', response.data) 

@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+
+{% block title %}Oura Ring Diagnostics{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>Oura Ring Diagnostics</h1>
+            <p class="lead">Use this page to diagnose issues with Oura Ring data import.</p>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Run Diagnostic Check</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        <div class="mb-3">
+                            <label for="start_date" class="form-label">Start Date</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" value="{{ default_start_date }}" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="end_date" class="form-label">End Date</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date" value="{{ default_end_date }}" required>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Run Diagnostics</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">Current Oura Metrics in Database</h5>
+                </div>
+                <div class="card-body">
+                    {% if metrics %}
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Metric</th>
+                                    <th>Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for metric in metrics %}
+                                <tr>
+                                    <td>{{ metric[0] }}</td>
+                                    <td>{{ metric[1] }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p>No Oura metrics found in the database.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if diagnostics %}
+    <div class="row">
+        <div class="col">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">Diagnostic Results</h5>
+                </div>
+                <div class="card-body">
+                    <h5>API Status: {{ diagnostics.api_status }}</h5>
+                    <h5>Date Range: {{ diagnostics.date_range }}</h5>
+                    
+                    <div class="mt-4">
+                        <h5>API Data Counts</h5>
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Endpoint</th>
+                                    <th>Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for endpoint, count in diagnostics.data_counts.items() %}
+                                <tr>
+                                    <td>{{ endpoint }}</td>
+                                    <td>{{ count }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <h5>Database Counts</h5>
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for type, count in diagnostics.database_counts.items() %}
+                                <tr>
+                                    <td>{{ type }}</td>
+                                    <td>{{ count }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <h5>Detailed API Responses</h5>
+                        <div class="accordion" id="endpointDetails">
+                            {% for endpoint, details in diagnostics.endpoints_checked.items() %}
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="heading{{ loop.index }}">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" aria-expanded="false" aria-controls="collapse{{ loop.index }}">
+                                        {{ endpoint }} - Status: {{ details.status }}
+                                    </button>
+                                </h2>
+                                <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading{{ loop.index }}" data-bs-parent="#endpointDetails">
+                                    <div class="accordion-body">
+                                        <pre><code>{{ details|tojson(indent=2) }}</code></pre>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row mt-4">
+        <div class="col">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">Reset and Re-import All Oura Data</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-danger"><strong>Warning:</strong> This will delete all existing Oura data in your database and re-import everything from scratch. This process may take several minutes to complete.</p>
+                    
+                    <form action="{{ url_for('data.reset_oura_data') }}" method="post" onsubmit="return confirm('Are you sure you want to delete all existing Oura data and re-import everything? This cannot be undone.');">
+                        <div class="mb-3">
+                            <label for="reset_start_date" class="form-label">Start Date (earliest data to import)</label>
+                            <input type="date" class="form-control" id="reset_start_date" name="start_date" required>
+                            <div class="form-text">Enter the earliest date you want to import data from (e.g., when you first got your Oura Ring)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="reset_end_date" class="form-label">End Date</label>
+                            <input type="date" class="form-control" id="reset_end_date" name="end_date" value="{{ default_end_date }}" required>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-danger">Reset and Re-import All Data</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col">
+            <a href="{{ url_for('data.import_data') }}" class="btn btn-secondary">Back to Import Page</a>
+        </div>
+    </div>
+</div>
+{% endblock %} 

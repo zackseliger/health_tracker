@@ -1,13 +1,12 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify, session
 from werkzeug.utils import secure_filename
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import traceback
-import requests
 from sqlalchemy import func
 
 from .. import db
-from ..models.base import HealthData, UserDefinedMetric, DataSource, ImportRecord
+from ..models.base import HealthData, UserDefinedMetric, ImportRecord, DataType
 from ..utils.oura_importer import OuraImporter
 from ..utils.chronometer_importer import ChronometerImporter
 
@@ -16,19 +15,52 @@ data_bp = Blueprint('data', __name__)
 @data_bp.route('/', strict_slashes=False)
 def index():
     """Data management home page"""
-    # Get all data sources
-    data_sources = DataSource.query.order_by(DataSource.name).all()
+    # Get all data sources (unique sources from DataType)
+    data_sources = db.session.query(DataType.source, db.func.max(DataType.last_import).label('last_import')) \
+                       .group_by(DataType.source) \
+                       .order_by(DataType.source) \
+                       .all()
     
     # Get all user-defined metrics
     custom_metrics = UserDefinedMetric.query.order_by(UserDefinedMetric.name).all()
     
     # Get some stats
     data_count = HealthData.query.count()
-    metric_count = db.session.query(HealthData.metric_name, HealthData.source).distinct().count()
+    metric_count = db.session.query(DataType.metric_name, DataType.source).distinct().count()
     
     # Get the date range of data
     latest_date = db.session.query(db.func.max(HealthData.date)).scalar()
     earliest_date = db.session.query(db.func.min(HealthData.date)).scalar()
+    
+    # Query to get the last import date for Oura
+    oura_last_import = db.session.query(db.func.max(DataType.last_import)).filter(
+        DataType.source.in_(['oura_sleep', 'oura_activity', 'oura_api', 'oura'])
+    ).scalar()
+    
+    # Get list of recent imports
+    recent_imports = ImportRecord.query.order_by(ImportRecord.date_imported.desc()).limit(10).all()
+    
+    # Check if Oura is connected through the session
+    oura_connected = session.get('oura_connected', False)
+    
+    # Format last import date for Oura
+    oura_last_import_date = None
+    if oura_last_import:
+        if isinstance(oura_last_import, datetime):
+            oura_last_import_date = oura_last_import.strftime("%Y-%m-%d")
+        else:
+            oura_last_import_date = datetime.fromtimestamp(oura_last_import).strftime("%Y-%m-%d")
+    
+    # Today's date for default end date
+    today_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Get custom metrics for the form
+    custom_metrics = UserDefinedMetric.query.all()
+    
+    # Make sure custom data source exists
+    DataType.update_last_import('custom')
+    
+    db.session.commit()
     
     return render_template('data/index.html', 
                           data_sources=data_sources,
@@ -36,7 +68,11 @@ def index():
                           data_count=data_count,
                           metric_count=metric_count,
                           latest_date=latest_date,
-                          earliest_date=earliest_date)
+                          earliest_date=earliest_date,
+                          oura_connected=oura_connected,
+                          oura_last_import_date=oura_last_import_date,
+                          today_date=today_date,
+                          recent_imports=recent_imports)
 
 @data_bp.route('/import', methods=['GET', 'POST'])
 def import_data():
@@ -56,9 +92,9 @@ def import_data():
             flash('Unknown data source', 'error')
     
     # Query to get the last import date for Oura
-    oura_last_import = db.session.query(DataSource.last_import).filter(
-        DataSource.name.in_(['oura_sleep', 'oura_activity', 'oura_api'])
-    ).order_by(DataSource.last_import.desc()).first()
+    oura_last_import = db.session.query(DataType.last_import).filter(
+        DataType.source.in_(['oura_sleep', 'oura_activity', 'oura_api'])
+    ).order_by(DataType.last_import.desc()).first()
     
     # Get list of recent imports
     recent_imports = ImportRecord.query.order_by(ImportRecord.date_imported.desc()).limit(10).all()
@@ -95,15 +131,61 @@ def _import_oura_api():
             flash('Start date and end date are required', 'error')
             return redirect(url_for('data.import_data'))
         
-        importer = OuraImporter(access_token=access_token if access_token else None)
-        data = importer.import_sleep_data(start_date, end_date)
+        # Log import parameters
+        current_app.logger.info(f"Oura API import initiated: date range {start_date} to {end_date}")
         
-        flash(f'Successfully imported {len(data)} Oura sleep data points', 'success')
+        importer = OuraImporter(access_token=access_token if access_token else None)
+        
+        # Import sleep data
+        try:
+            current_app.logger.info(f"Starting sleep data import: {start_date} to {end_date}")
+            sleep_data = importer.import_sleep_data(start_date, end_date)
+            current_app.logger.info(f"Sleep data import completed: {len(sleep_data)} records")
+            flash(f'Successfully imported {len(sleep_data)} Oura sleep data points', 'success')
+        except Exception as e:
+            current_app.logger.error(f"Error importing sleep data: {str(e)}")
+            flash(f'Error importing sleep data: {str(e)}', 'error')
+            sleep_data = []
+        
+        # Import activity data
+        try:
+            current_app.logger.info(f"Starting activity data import: {start_date} to {end_date}")
+            activity_data = importer.import_activity_data(start_date, end_date)
+            current_app.logger.info(f"Activity data import completed: {len(activity_data)} records")
+            flash(f'Successfully imported {len(activity_data)} Oura activity data points', 'success')
+        except Exception as e:
+            current_app.logger.error(f"Error importing activity data: {str(e)}")
+            flash(f'Error importing activity data: {str(e)}', 'error')
+            activity_data = []
+        
+        # Import tags data
+        try:
+            current_app.logger.info(f"Starting tag data import: {start_date} to {end_date}")
+            tags_data = importer.import_tags_data(start_date, end_date)
+            current_app.logger.info(f"Tag data import completed: {len(tags_data)} records")
+            flash(f'Successfully imported {len(tags_data)} Oura tag data points', 'success')
+        except Exception as e:
+            current_app.logger.error(f"Error importing tag data: {str(e)}")
+            flash(f'Note: Tag data import failed, but sleep and activity data were imported: {str(e)}', 'warning')
+            tags_data = []
+        
+        # Create import record
+        import_record = ImportRecord(
+            source='oura',
+            date_imported=datetime.now(),
+            date_range_start=datetime.strptime(start_date, '%Y-%m-%d').date(),
+            date_range_end=datetime.strptime(end_date, '%Y-%m-%d').date(),
+            record_count=len(sleep_data) + len(activity_data) + len(tags_data),
+            status='success'
+        )
+        db.session.add(import_record)
+        db.session.commit()
+        
     except Exception as e:
         current_app.logger.error(f"Error importing Oura API data: {e}")
         flash(f'Error importing data: {str(e)}', 'error')
     
-    return redirect(url_for('data.index'))
+    return redirect(url_for('data.import_data'))
 
 def _import_oura_csv():
     """Import data from Oura CSV file"""
@@ -215,43 +297,48 @@ def _import_custom_data():
             )
             db.session.add(udm)
         
-        # Check if a data point already exists for this date/metric
-        existing = HealthData.query.filter_by(
-            date=date_obj,
+        # Get or create the DataType
+        data_type = DataType.query.filter_by(
             source='custom',
             metric_name=metric_name
+        ).first()
+        
+        if not data_type:
+            data_type = DataType(
+                source='custom',
+                metric_name=metric_name,
+                metric_units=metric_units
+            )
+            db.session.add(data_type)
+            db.session.flush()  # Flush to get the ID
+        
+        # Check if a data point already exists for this date/metric
+        existing = HealthData.query.join(
+            DataType, HealthData.data_type_id == DataType.id
+        ).filter(
+            HealthData.date == date_obj,
+            DataType.source == 'custom',
+            DataType.metric_name == metric_name
         ).first()
         
         if existing:
             # Update existing data point
             existing.metric_value = metric_value
-            existing.metric_units = metric_units
             existing.notes = notes
             flash(f'Updated existing data point for {metric_name} on {date_str}', 'success')
         else:
             # Create new data point
             data_point = HealthData(
                 date=date_obj,
-                source='custom',
-                metric_name=metric_name,
+                data_type=data_type,
                 metric_value=metric_value,
-                metric_units=metric_units,
                 notes=notes
             )
             db.session.add(data_point)
             flash(f'Added new data point for {metric_name} on {date_str}', 'success')
         
         # Make sure custom data source exists
-        custom_source = DataSource.query.filter_by(name='custom').first()
-        if not custom_source:
-            custom_source = DataSource(
-                name='custom',
-                type='manual',
-                last_import=datetime.utcnow()
-            )
-            db.session.add(custom_source)
-        else:
-            custom_source.last_import = datetime.utcnow()
+        DataType.update_last_import('custom')
         
         db.session.commit()
     except Exception as e:
@@ -263,55 +350,14 @@ def _import_custom_data():
 
 @data_bp.route('/custom-metrics', methods=['GET', 'POST'])
 def custom_metrics():
-    """Manage custom metrics"""
+    """Manage user-defined custom metrics"""
     if request.method == 'POST':
-        action = request.form.get('action')
-        
-        if action == 'add':
-            name = request.form.get('name')
-            units = request.form.get('units')
-            description = request.form.get('description')
-            frequency = request.form.get('frequency')
-            
-            if not name:
-                flash('Metric name is required', 'error')
-                return redirect(url_for('data.custom_metrics'))
-            
-            # Check if metric already exists
-            existing = UserDefinedMetric.query.filter_by(name=name).first()
-            if existing:
-                flash(f'A metric with name "{name}" already exists', 'error')
-                return redirect(url_for('data.custom_metrics'))
-            
-            # Create new metric
-            metric = UserDefinedMetric(
-                name=name,
-                units=units,
-                description=description,
-                frequency=frequency
-            )
-            db.session.add(metric)
-            db.session.commit()
-            
-            flash(f'Created new custom metric: {name}', 'success')
-            return redirect(url_for('data.custom_metrics'))
-        
-        elif action == 'delete':
+        # Handle deletion
+        if 'delete' in request.form:
             metric_id = request.form.get('metric_id')
-            
-            if not metric_id:
-                flash('Metric ID is required', 'error')
-                return redirect(url_for('data.custom_metrics'))
-            
-            # Delete the metric
             metric = UserDefinedMetric.query.get(metric_id)
+            
             if metric:
-                # Also delete all data points for this metric
-                HealthData.query.filter_by(
-                    source='custom',
-                    metric_name=metric.name
-                ).delete()
-                
                 db.session.delete(metric)
                 db.session.commit()
                 
@@ -325,6 +371,151 @@ def custom_metrics():
     metrics = UserDefinedMetric.query.order_by(UserDefinedMetric.name).all()
     
     return render_template('data/custom_metrics.html', metrics=metrics)
+
+@data_bp.route('/custom-metrics/add', methods=['GET', 'POST'])
+def add_custom_metric():
+    """Add a new custom metric"""
+    if request.method == 'POST':
+        name = request.form.get('name')
+        unit = request.form.get('unit')
+        description = request.form.get('description')
+        data_type = request.form.get('data_type', 'numeric')
+        is_cumulative = 'is_cumulative' in request.form
+        
+        # Create new metric
+        metric = UserDefinedMetric(
+            name=name,
+            unit=unit,
+            description=description,
+            data_type=data_type,
+            is_cumulative=is_cumulative
+        )
+        
+        db.session.add(metric)
+        db.session.commit()
+        
+        # Create a DataType entry for this custom metric
+        data_type_entry = DataType(
+            source='custom',
+            metric_name=name,
+            metric_units=unit
+        )
+        db.session.add(data_type_entry)
+        db.session.commit()
+        
+        flash(f'Added new custom metric: {name}', 'success')
+        return redirect(url_for('data.custom_metrics'))
+    
+    # GET request - show the form
+    return render_template('data/add_custom_metric.html')
+
+@data_bp.route('/custom-metrics/view/<int:metric_id>', methods=['GET'])
+def view_custom_metric(metric_id):
+    """View details for a specific custom metric"""
+    metric = UserDefinedMetric.query.get_or_404(metric_id)
+    
+    # Get data points for this metric
+    data_points = HealthData.query.join(DataType).filter(
+        DataType.source == 'custom',
+        DataType.metric_name == metric.name
+    ).order_by(HealthData.date.desc()).all()
+    
+    return render_template('data/view_custom_metric.html', metric=metric, data_points=data_points)
+
+@data_bp.route('/custom-metrics/manual-entry/<int:metric_id>', methods=['GET', 'POST'])
+def manual_entry(metric_id):
+    """Manual data entry for a custom metric"""
+    metric = UserDefinedMetric.query.get_or_404(metric_id)
+    
+    if request.method == 'POST':
+        date_str = request.form.get('date')
+        value = request.form.get('value')
+        notes = request.form.get('notes', '')
+        
+        try:
+            # Parse date
+            entry_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            
+            # Parse value based on data type
+            if metric.data_type == 'numeric':
+                metric_value = float(value)
+            elif metric.data_type == 'boolean':
+                metric_value = 1 if value.lower() in ['true', 'yes', '1'] else 0
+            elif metric.data_type == 'scale':
+                metric_value = int(value)
+            else:
+                metric_value = float(value)
+            
+            # Get the data type
+            data_type = DataType.query.filter_by(
+                source='custom',
+                metric_name=metric.name
+            ).first()
+            
+            if not data_type:
+                # Create data type if it doesn't exist
+                data_type = DataType(
+                    source='custom',
+                    metric_name=metric.name,
+                    metric_units=metric.unit
+                )
+                db.session.add(data_type)
+                db.session.commit()
+            
+            # Check if an entry already exists for this date
+            existing = HealthData.query.filter_by(
+                date=entry_date,
+                data_type_id=data_type.id
+            ).first()
+            
+            if existing:
+                # Update existing entry
+                existing.metric_value = metric_value
+                existing.notes = notes
+                flash(f'Updated data for {metric.name} on {date_str}', 'success')
+            else:
+                # Create new entry
+                new_entry = HealthData(
+                    date=entry_date,
+                    data_type_id=data_type.id,
+                    metric_value=metric_value,
+                    notes=notes
+                )
+                db.session.add(new_entry)
+                flash(f'Added new data for {metric.name} on {date_str}', 'success')
+            
+            db.session.commit()
+            return redirect(url_for('data.view_custom_metric', metric_id=metric.id))
+            
+        except ValueError as e:
+            flash(f'Error: {str(e)}', 'danger')
+            return render_template('data/manual_entry.html', metric=metric)
+    
+    # GET request - show the form
+    return render_template('data/manual_entry.html', metric=metric)
+
+@data_bp.route('/custom-metrics/delete', methods=['POST'])
+def delete_custom_metric():
+    """Delete a custom metric and all its data points"""
+    metric_id = request.form.get('metric_id')
+    if not metric_id:
+        flash('No metric specified', 'danger')
+        return redirect(url_for('data.custom_metrics'))
+    
+    metric = UserDefinedMetric.query.get_or_404(metric_id)
+    
+    # Delete all data points for this metric
+    data_type = DataType.query.filter_by(source='custom', metric_name=metric.name).first()
+    if data_type:
+        HealthData.query.filter_by(data_type_id=data_type.id).delete()
+        db.session.delete(data_type)
+    
+    # Delete the metric definition
+    db.session.delete(metric)
+    db.session.commit()
+    
+    flash(f'Custom metric "{metric.name}" has been deleted', 'success')
+    return redirect(url_for('data.custom_metrics'))
 
 @data_bp.route('/browse', methods=['GET', 'POST'])
 def browse():
@@ -360,13 +551,14 @@ def browse():
                                metric=metric, max_calories=max_calories, date=date_filter))
     
     # Build query
-    query = HealthData.query
+    query = HealthData.query.join(DataType)
     
     if source:
-        query = query.filter(HealthData.source == source)
+        # Filter by source in DataType
+        query = query.filter(DataType.source == source)
     
     if metric:
-        query = query.filter(HealthData.metric_name == metric)
+        query = query.filter(DataType.metric_name == metric)
     
     # Add date filtering
     if date_filter:
@@ -388,22 +580,28 @@ def browse():
         query = query.filter(HealthData.date.in_(energy_subquery))
     
     # Get paginated results
-    data = query.order_by(HealthData.date.desc(), HealthData.source, HealthData.metric_name).paginate(
+    data = query.order_by(HealthData.date.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
     
+    # Prepare data for the template
+    for item in data.items:
+        item.source = item.data_type.source
+        item.metric_name = item.data_type.metric_name
+        item.metric_units = item.data_type.metric_units
+    
     # Get sources and metrics for filtering
-    sources = db.session.query(HealthData.source).distinct().all()
-    metrics = db.session.query(HealthData.metric_name).distinct().all()
+    sources = db.session.query(DataType.source).distinct().all()
+    metrics = db.session.query(DataType.metric_name).distinct().all()
     
     # Get min, max values for energy to set slider bounds
     energy_stats = db.session.query(
         func.min(HealthData.metric_value).label('min_value'),
         func.max(HealthData.metric_value).label('max_value')
-    ).filter(HealthData.metric_name == 'Energy (kcal)').first()
+    ).join(DataType).filter(DataType.metric_name == 'Energy (kcal)').first()
     
-    min_calories = int(energy_stats.min_value) if energy_stats.min_value is not None else 0
-    max_calories_bound = int(energy_stats.max_value) if energy_stats.max_value is not None else 4000
+    min_calories = int(energy_stats.min_value) if energy_stats and energy_stats.min_value is not None else 0
+    max_calories_bound = int(energy_stats.max_value) if energy_stats and energy_stats.max_value is not None else 4000
     
     return render_template('data/browse.html', 
                           data=data,
@@ -486,33 +684,58 @@ def import_oura():
         personal_token = session.get('oura_personal_token')
         start_date = request.form.get('start_date')
         end_date = request.form.get('end_date')
-        data_type = request.form.get('data_type', 'sleep')  # Default to sleep data
+        data_type = request.form.get('data_type', 'all')  # Default to all data
         
         if not start_date or not end_date:
             flash('Start date and end date are required', 'error')
             return redirect(url_for('data.import_data'))
+            
+        # Log import parameters
+        current_app.logger.info(f"Oura import initiated: date range {start_date} to {end_date}, type: {data_type}")
         
         importer = OuraImporter(personal_token=personal_token)
         
         imported_data = []
+        
+        # Import sleep data
         if data_type == 'sleep' or data_type == 'all':
-            sleep_data = importer.import_sleep_data(start_date, end_date)
-            imported_data.extend(sleep_data)
-            flash(f'Successfully imported {len(sleep_data)} Oura sleep data points', 'success')
+            try:
+                current_app.logger.info(f"Starting sleep data import: {start_date} to {end_date}")
+                sleep_data = importer.import_sleep_data(start_date, end_date)
+                imported_data.extend(sleep_data)
+                current_app.logger.info(f"Sleep data import completed: {len(sleep_data)} records")
+                flash(f'Successfully imported {len(sleep_data)} Oura sleep data points', 'success')
+            except Exception as e:
+                current_app.logger.error(f"Error importing sleep data: {str(e)}")
+                flash(f'Error importing sleep data: {str(e)}', 'error')
         
+        # Import activity data
         if data_type == 'activity' or data_type == 'all':
-            activity_data = importer.import_activity_data(start_date, end_date)
-            imported_data.extend(activity_data)
-            flash(f'Successfully imported {len(activity_data)} Oura activity data points', 'success')
+            try:
+                current_app.logger.info(f"Starting activity data import: {start_date} to {end_date}")
+                activity_data = importer.import_activity_data(start_date, end_date)
+                imported_data.extend(activity_data)
+                current_app.logger.info(f"Activity data import completed: {len(activity_data)} records")
+                flash(f'Successfully imported {len(activity_data)} Oura activity data points', 'success')
+            except Exception as e:
+                current_app.logger.error(f"Error importing activity data: {str(e)}")
+                flash(f'Error importing activity data: {str(e)}', 'error')
         
+        # Import tags data
         if data_type == 'tags' or data_type == 'all':
-            tags_data = importer.import_tags_data(start_date, end_date)
-            imported_data.extend(tags_data)
-            flash(f'Successfully imported {len(tags_data)} Oura tag data points', 'success')
+            try:
+                current_app.logger.info(f"Starting tag data import: {start_date} to {end_date}")
+                tags_data = importer.import_tags_data(start_date, end_date)
+                imported_data.extend(tags_data)
+                current_app.logger.info(f"Tag data import completed: {len(tags_data)} records")
+                flash(f'Successfully imported {len(tags_data)} Oura tag data points', 'success')
+            except Exception as e:
+                current_app.logger.error(f"Error importing tag data: {str(e)}")
+                flash(f'Note: Tag data import failed, but other data were imported if selected: {str(e)}', 'warning')
         
         # Create import record
         import_record = ImportRecord(
-            source=f'oura_{data_type}',
+            source='oura',
             date_imported=datetime.now(),
             date_range_start=datetime.strptime(start_date, '%Y-%m-%d').date(),
             date_range_end=datetime.strptime(end_date, '%Y-%m-%d').date(),
@@ -522,13 +745,41 @@ def import_oura():
         db.session.add(import_record)
         db.session.commit()
         
+        # Debug database counts
+        if current_app.config.get('DEBUG', False):
+            # Count sleep records
+            sleep_count = db.session.query(HealthData).join(
+                DataType, HealthData.data_type_id == DataType.id
+            ).filter(
+                DataType.source == 'oura',
+                DataType.metric_name.in_(['sleep_score', 'rem_sleep', 'deep_sleep'])
+            ).count()
+            
+            # Count activity records
+            activity_count = db.session.query(HealthData).join(
+                DataType, HealthData.data_type_id == DataType.id
+            ).filter(
+                DataType.source == 'oura',
+                DataType.metric_name.in_(['activity_score', 'steps'])
+            ).count()
+            
+            # Count tag records
+            tag_count = db.session.query(HealthData).join(
+                DataType, HealthData.data_type_id == DataType.id
+            ).filter(
+                DataType.source == 'oura',
+                DataType.metric_name.like('tag_%')
+            ).count()
+            
+            current_app.logger.info(f"Database counts - Sleep: {sleep_count}, Activity: {activity_count}, Tags: {tag_count}")
+        
     except Exception as e:
         current_app.logger.error(f"Error importing Oura API data: {e}")
         flash(f'Error importing data: {str(e)}', 'error')
         
         # Create failed import record
         import_record = ImportRecord(
-            source=f'oura_{data_type}',
+            source='oura',
             date_imported=datetime.now(),
             date_range_start=datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None,
             date_range_end=datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else None,
@@ -539,7 +790,7 @@ def import_oura():
         db.session.add(import_record)
         db.session.commit()
     
-    return redirect(url_for('data.index'))
+    return redirect(url_for('data.import_data'))
 
 @data_bp.route('/date/<date_str>', methods=['GET'])
 @data_bp.route('/date', methods=['GET', 'POST'])
@@ -567,16 +818,19 @@ def date_view(date_str=None):
     today_str = date.today().strftime('%Y-%m-%d')  # For the "Today" button
     
     # Query all health data for the selected date
-    health_data = HealthData.query.filter_by(date=selected_date).order_by(
-        HealthData.source, HealthData.metric_name
+    health_data = HealthData.query.join(DataType).filter(
+        HealthData.date == selected_date
+    ).order_by(
+        DataType.source, DataType.metric_name
     ).all()
     
     # Group data by source for easier display
     data_by_source = {}
     for item in health_data:
-        if item.source not in data_by_source:
-            data_by_source[item.source] = []
-        data_by_source[item.source].append(item)
+        source = item.data_type.source
+        if source not in data_by_source:
+            data_by_source[source] = []
+        data_by_source[source].append(item)
     
     # Get the next and previous dates that have data
     next_date = HealthData.query.filter(
@@ -599,4 +853,141 @@ def date_view(date_str=None):
         next_date=next_date.date if next_date else None,
         prev_date=prev_date.date if prev_date else None,
         today_str=today_str
-    ) 
+    )
+
+@data_bp.route('/diagnose/oura', methods=['GET', 'POST'])
+def diagnose_oura():
+    """Diagnostic page for Oura API connection issues"""
+    if not session.get('oura_connected'):
+        flash('You need to connect your Oura Ring first', 'error')
+        return redirect(url_for('data.import_data'))
+        
+    personal_token = session.get('oura_personal_token')
+    diagnostics = None
+    
+    if request.method == 'POST':
+        start_date = request.form.get('start_date')
+        end_date = request.form.get('end_date')
+        
+        if not start_date or not end_date:
+            flash('Start date and end date are required', 'error')
+        else:
+            try:
+                importer = OuraImporter(personal_token=personal_token)
+                diagnostics = importer.diagnostic_check(start_date, end_date)
+                flash('Diagnostic check completed! See results below.', 'success')
+            except Exception as e:
+                current_app.logger.error(f"Error running diagnostics: {e}")
+                flash(f'Error running diagnostics: {str(e)}', 'error')
+    
+    # Get list of all metrics in the database
+    metrics = db.session.query(
+        DataType.metric_name, db.func.count(HealthData.id)
+    ).join(
+        HealthData, DataType.id == HealthData.data_type_id
+    ).filter(
+        DataType.source == 'oura'
+    ).group_by(
+        DataType.metric_name
+    ).all()
+    
+    # Set default dates if not provided (last 30 days)
+    today = date.today()
+    default_end_date = today.strftime('%Y-%m-%d')
+    default_start_date = (today - timedelta(days=30)).strftime('%Y-%m-%d')
+    
+    return render_template('data/diagnose_oura.html', 
+                          diagnostics=diagnostics,
+                          metrics=metrics,
+                          default_start_date=default_start_date,
+                          default_end_date=default_end_date)
+
+@data_bp.route('/reset/oura', methods=['POST'])
+def reset_oura_data():
+    """Reset and re-import all Oura data"""
+    if not session.get('oura_connected'):
+        flash('You need to connect your Oura Ring first', 'error')
+        return redirect(url_for('data.import_data'))
+    
+    try:
+        personal_token = session.get('oura_personal_token')
+        start_date = request.form.get('start_date')
+        end_date = request.form.get('end_date')
+        
+        if not start_date or not end_date:
+            flash('Start date and end date are required', 'error')
+            return redirect(url_for('data.diagnose_oura'))
+        
+        # Delete all existing Oura data
+        current_app.logger.info(f"Deleting all Oura data before reimport")
+        
+        # 1. Find all Oura data types
+        oura_data_types = DataType.query.filter_by(source='oura').all()
+        data_type_ids = [dt.id for dt in oura_data_types]
+        
+        # 2. Delete all HealthData records with these data_type_ids
+        if data_type_ids:
+            delete_count = HealthData.query.filter(HealthData.data_type_id.in_(data_type_ids)).delete(synchronize_session=False)
+            current_app.logger.info(f"Deleted {delete_count} Oura health data records")
+            
+            # 3. Delete the data types themselves
+            for dt in oura_data_types:
+                db.session.delete(dt)
+                
+            # 4. Delete Oura import records
+            import_records = ImportRecord.query.filter(ImportRecord.source.like('oura%')).all()
+            for record in import_records:
+                db.session.delete(record)
+                
+            db.session.commit()
+            flash(f'Successfully deleted {delete_count} existing Oura data records', 'info')
+        
+        # Re-import all data
+        importer = OuraImporter(personal_token=personal_token)
+        
+        # Import all data types
+        current_app.logger.info(f"Starting full Oura data re-import from {start_date} to {end_date}")
+        
+        # Import sleep data
+        try:
+            sleep_data = importer.import_sleep_data(start_date, end_date)
+            flash(f'Successfully re-imported {len(sleep_data)} Oura sleep data points', 'success')
+        except Exception as e:
+            current_app.logger.error(f"Error re-importing sleep data: {str(e)}")
+            flash(f'Error re-importing sleep data: {str(e)}', 'error')
+        
+        # Import activity data
+        try:
+            activity_data = importer.import_activity_data(start_date, end_date)
+            flash(f'Successfully re-imported {len(activity_data)} Oura activity data points', 'success')
+        except Exception as e:
+            current_app.logger.error(f"Error re-importing activity data: {str(e)}")
+            flash(f'Error re-importing activity data: {str(e)}', 'error')
+        
+        # Import tags data
+        try:
+            tags_data = importer.import_tags_data(start_date, end_date)
+            flash(f'Successfully re-imported {len(tags_data)} Oura tag data points', 'success')
+        except Exception as e:
+            current_app.logger.error(f"Error re-importing tag data: {str(e)}")
+            flash(f'Error re-importing tag data: {str(e)}', 'warning')
+        
+        # Create import record
+        import_record = ImportRecord(
+            source='oura',
+            date_imported=datetime.now(),
+            date_range_start=datetime.strptime(start_date, '%Y-%m-%d').date(),
+            date_range_end=datetime.strptime(end_date, '%Y-%m-%d').date(),
+            record_count=len(sleep_data) + len(activity_data) + len(tags_data) if 'sleep_data' in locals() and 'activity_data' in locals() and 'tags_data' in locals() else 0,
+            status='success'
+        )
+        db.session.add(import_record)
+        db.session.commit()
+        
+        flash('Complete re-import of Oura data finished!', 'success')
+        
+    except Exception as e:
+        current_app.logger.error(f"Error during Oura data reset/reimport: {e}")
+        flash(f'Error during reset/reimport process: {str(e)}', 'error')
+    
+    return redirect(url_for('data.diagnose_oura')) 

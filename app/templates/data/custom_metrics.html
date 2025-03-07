@@ -45,9 +45,9 @@
     </div>
 </div>
 
-{% if custom_metrics %}
+{% if metrics %}
 <div class="row">
-    {% for metric in custom_metrics %}
+    {% for metric in metrics %}
     <div class="col-md-4 mb-4">
         <div class="card h-100 metric-card">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -273,7 +273,8 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <form id="editMetricForm" method="post" action="{{ url_for('data.edit_custom_metric') }}">
+                <form id="editMetricForm" method="post" action="{{ url_for('data.custom_metrics') }}">
+                    <input type="hidden" name="action" value="edit">
                     <input type="hidden" id="editMetricId" name="metric_id">
                     <div class="mb-3">
                         <label for="editMetricName" class="form-label">Metric Name</label>

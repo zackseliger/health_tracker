@@ -2,7 +2,7 @@ import pandas as pd
 from scipy import stats
 from sqlalchemy import func
 from .. import db
-from ..models.base import HealthData
+from ..models.base import HealthData, DataType
 
 class HealthAnalyzer:
     """Utility class for analyzing health data correlations"""
@@ -13,12 +13,14 @@ class HealthAnalyzer:
     def get_available_metrics(self):
         """Get a list of all available metrics in the database"""
         metrics = db.session.query(
-            HealthData.metric_name, 
-            HealthData.source,
+            DataType.metric_name, 
+            DataType.source,
             func.count(HealthData.id).label('count')
+        ).join(
+            HealthData, HealthData.data_type_id == DataType.id
         ).group_by(
-            HealthData.metric_name, 
-            HealthData.source
+            DataType.metric_name, 
+            DataType.source
         ).all()
         
         result = []
@@ -37,10 +39,12 @@ class HealthAnalyzer:
         query = db.session.query(
             HealthData.date,
             HealthData.metric_value,
-            HealthData.metric_units
+            DataType.metric_units
+        ).join(
+            DataType, HealthData.data_type_id == DataType.id
         ).filter(
-            HealthData.metric_name == metric_name,
-            HealthData.source == source
+            DataType.metric_name == metric_name,
+            DataType.source == source
         )
         
         if start_date:
@@ -67,9 +71,11 @@ class HealthAnalyzer:
         # First, query all data within date range
         query = db.session.query(
             HealthData.date,
-            HealthData.source,
-            HealthData.metric_name,
+            DataType.source,
+            DataType.metric_name,
             HealthData.metric_value
+        ).join(
+            DataType, HealthData.data_type_id == DataType.id
         )
         
         if start_date:

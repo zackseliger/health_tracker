@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Custom Metric - Health Data Tracker{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h2 class="mb-0">Add Custom Metric</h2>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('data.add_custom_metric') }}">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Metric Name</label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                            <div class="form-text">A unique name for your custom metric</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="units" class="form-label">Units</label>
+                            <input type="text" class="form-control" id="units" name="units">
+                            <div class="form-text">The units for this metric (e.g., kg, steps, score)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                            <div class="form-text">A brief description of what this metric measures</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="frequency" class="form-label">Frequency</label>
+                            <select class="form-select" id="frequency" name="frequency">
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                            <div class="form-text">How often this metric is typically recorded</div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('data.custom_metrics') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Back to Metrics
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-plus-circle me-2"></i>Add Metric
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
