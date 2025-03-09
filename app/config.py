@@ -4,10 +4,11 @@ import secrets
 class Config:
     """Base configuration class"""
     SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(16)
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///health_data.db'
+    basedir = os.path.dirname(os.path.abspath(__file__))
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or f'sqlite:///{os.path.join(basedir, "health_data.db")}'
     
     # File upload settings
-    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+    UPLOAD_FOLDER = os.path.join(basedir, 'uploads')
     
     # Oura API settings
     OURA_API_BASE_URL = 'https://api.ouraring.com'

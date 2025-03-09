@@ -1,11 +1,11 @@
-import numpy as np
 from datetime import date, timedelta
-from unittest.mock import patch
-
+import pandas as pd
 import sys
 import os
+
 # Add the parent directory to the path to make app importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 from tests.test_base import BaseTestCase
 from app import db

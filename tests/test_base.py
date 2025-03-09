@@ -12,7 +12,9 @@ class BaseTestCase(unittest.TestCase):
         self.db_fd, db_path = tempfile.mkstemp()
         
         # Configure the app for testing
-        self.app = create_app()
+        self.app = create_app('testing')  # Explicitly use testing configuration
+        
+        # Override the database URI to ensure we're using our temp file, not the production db
         self.app.config.update(
             TESTING=True,
             DEBUG=False,
@@ -24,6 +26,9 @@ class BaseTestCase(unittest.TestCase):
         self.app_context = self.app.app_context()
         self.app_context.push()
         self.client = self.app.test_client()
+        
+        # Store the path for cleanup
+        self.db_path = db_path
         
         # Create all database tables
         db.create_all()
@@ -37,6 +42,12 @@ class BaseTestCase(unittest.TestCase):
         # Close the app context
         self.app_context.pop()
         
-        # Close and delete the temp database file
+        # Close and delete the temp database file SAFELY
         os.close(self.db_fd)
-        os.unlink(self.app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')) 
+        
+        # Only delete the temporary file we created, NEVER the production database
+        if os.path.exists(self.db_path):
+            try:
+                os.unlink(self.db_path)
+            except Exception as e:
+                print(f"Warning: Could not delete temporary test database: {e}") 

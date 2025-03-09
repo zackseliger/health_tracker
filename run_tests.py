@@ -10,6 +10,9 @@ import os
 
 def run_tests():
     """Run all the tests."""
+    # Set environment to testing to ensure we never use production settings
+    os.environ['FLASK_ENV'] = 'testing'
+    
     # Get the tests directory
     tests_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tests')
     

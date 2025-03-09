@@ -119,9 +119,6 @@ class ChronometerImporter:
         # Store the data
         self._store_data(processed_data)
         
-        # Update data source record
-        self._update_data_source('chronometer_csv')
-        
         return processed_data
     
     def _process_csv_data(self, df):

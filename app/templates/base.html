@@ -38,9 +38,10 @@
                             Data
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="dataDropdown">
-                            <li><a class="dropdown-item" href="{{ url_for('data.index') }}">Manage Data</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('data.import_data') }}">Import Data</a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('data.browse') }}">Browse Data</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('data.index') }}">Overview</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('data.import_data') }}">Import</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('data.browse') }}">Browse</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('data.data_types') }}">Data Types</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('data.custom_metrics') }}">Custom Metrics</a></li>
                         </ul>
                     </li>

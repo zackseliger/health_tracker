@@ -14,7 +14,7 @@ data_bp = Blueprint('data', __name__)
 
 @data_bp.route('/', strict_slashes=False)
 def index():
-    """Data management home page"""
+    """Data home page"""
     # Get all data sources (unique sources from DataType)
     data_sources = db.session.query(DataType.source, db.func.max(DataType.last_import).label('last_import')) \
                        .group_by(DataType.source) \
@@ -56,11 +56,6 @@ def index():
     
     # Get custom metrics for the form
     custom_metrics = UserDefinedMetric.query.all()
-    
-    # Make sure custom data source exists
-    DataType.update_last_import('custom')
-    
-    db.session.commit()
     
     return render_template('data/index.html', 
                           data_sources=data_sources,
@@ -572,7 +567,8 @@ def browse():
     if max_calories is not None:
         # First, get all dates where there's an "Energy (kcal)" entry below the threshold
         energy_subquery = db.session.query(HealthData.date)\
-            .filter(HealthData.metric_name == 'Energy (kcal)')\
+            .join(DataType)\
+            .filter(DataType.metric_name == 'Energy (kcal)')\
             .filter(HealthData.metric_value <= max_calories)\
             .distinct()
         
@@ -641,10 +637,10 @@ def api_metrics():
     """API to get available metrics"""
     source = request.args.get('source')
     
-    query = db.session.query(HealthData.metric_name).distinct()
+    query = db.session.query(DataType.metric_name).distinct()
     
     if source:
-        query = query.filter(HealthData.source == source)
+        query = query.filter(DataType.source == source)
     
     metrics = [m[0] for m in query.all()]
     
@@ -990,4 +986,58 @@ def reset_oura_data():
         current_app.logger.error(f"Error during Oura data reset/reimport: {e}")
         flash(f'Error during reset/reimport process: {str(e)}', 'error')
     
-    return redirect(url_for('data.diagnose_oura')) 
+    return redirect(url_for('data.diagnose_oura'))
+
+@data_bp.route('/data-types', methods=['GET'])
+def data_types():
+    """View all data types in the system"""
+    data_types = DataType.query.order_by(DataType.source, DataType.metric_name).all()
+    return render_template('data/data_types.html', data_types=data_types)
+
+@data_bp.route('/data-types/edit/<int:type_id>', methods=['GET', 'POST'])
+def edit_data_type(type_id):
+    """Edit a specific data type"""
+    data_type = DataType.query.get_or_404(type_id)
+    
+    if request.method == 'POST':
+        try:
+            data_type.source = request.form['source']
+            data_type.metric_name = request.form['metric_name']
+            data_type.metric_units = request.form['metric_units']
+            data_type.source_type = request.form['source_type']
+            
+            db.session.commit()
+            flash(f'Successfully updated data type: {data_type.source}:{data_type.metric_name}', 'success')
+            return redirect(url_for('data.data_types'))
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error updating data type: {e}")
+            flash(f'Error updating data type: {str(e)}', 'error')
+    
+    return render_template('data/edit_data_type.html', data_type=data_type)
+
+@data_bp.route('/data-types/delete/<int:type_id>', methods=['POST'])
+def delete_data_type(type_id):
+    """Delete a data type (with confirmation)"""
+    data_type = DataType.query.get_or_404(type_id)
+    
+    try:
+        # Check if there's any health data using this data type
+        if data_type.health_data.count() > 0:
+            flash(f'Cannot delete data type that has {data_type.health_data.count()} data points. Delete the data first.', 'error')
+            return redirect(url_for('data.data_types'))
+        
+        source = data_type.source
+        metric = data_type.metric_name
+        
+        db.session.delete(data_type)
+        db.session.commit()
+        
+        flash(f'Successfully deleted data type: {source}:{metric}', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error deleting data type: {e}")
+        flash(f'Error deleting data type: {str(e)}', 'error')
+    
+    return redirect(url_for('data.data_types')) 

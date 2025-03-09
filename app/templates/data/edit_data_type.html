@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Data Type{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>Edit Data Type</h1>
+            <p class="lead">Edit details for data type ID {{ data_type.id }}</p>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Edit Data Type Details</h5>
+        </div>
+        <div class="card-body">
+            <form action="{{ url_for('data.edit_data_type', type_id=data_type.id) }}" method="POST">
+                <div class="mb-3">
+                    <label for="source" class="form-label">Source</label>
+                    <input type="text" class="form-control" id="source" name="source" 
+                           value="{{ data_type.source }}" required>
+                    <small class="form-text text-muted">
+                        The source of the data (e.g., 'oura', 'chronometer', 'custom')
+                    </small>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="metric_name" class="form-label">Metric Name</label>
+                    <input type="text" class="form-control" id="metric_name" name="metric_name" 
+                           value="{{ data_type.metric_name }}" required>
+                    <small class="form-text text-muted">
+                        The name of the metric (e.g., 'sleep_duration', 'calories')
+                    </small>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="metric_units" class="form-label">Metric Units</label>
+                    <input type="text" class="form-control" id="metric_units" name="metric_units" 
+                           value="{{ data_type.metric_units }}">
+                    <small class="form-text text-muted">
+                        Units for the metric (e.g., 'hours', 'calories', 'mg')
+                    </small>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="source_type" class="form-label">Source Type</label>
+                    <select class="form-select" id="source_type" name="source_type">
+                        <option value="api" {% if data_type.source_type == 'api' %}selected{% endif %}>API</option>
+                        <option value="csv" {% if data_type.source_type == 'csv' %}selected{% endif %}>CSV</option>
+                        <option value="manual" {% if data_type.source_type == 'manual' %}selected{% endif %}>Manual</option>
+                        <option value="" {% if data_type.source_type is none %}selected{% endif %}>None</option>
+                    </select>
+                    <small class="form-text text-muted">
+                        How the data is imported (API, CSV, or manually entered)
+                    </small>
+                </div>
+                
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> <strong>Warning:</strong> 
+                    Changing the source or metric name may break data relationships. Only edit these values 
+                    if you're sure of what you're doing.
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('data.data_types') }}" class="btn btn-secondary">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">Related Data Points</h5>
+        </div>
+        <div class="card-body">
+            <p>This data type has <strong>{{ data_type.health_data.count() }}</strong> data points associated with it.</p>
+            {% if data_type.health_data.count() > 0 %}
+            <a href="{{ url_for('data.browse', source=data_type.source, metric=data_type.metric_name) }}" 
+               class="btn btn-outline-info">
+                <i class="bi bi-table"></i> View Associated Data
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

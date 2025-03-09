@@ -37,8 +37,10 @@ def create_app(config_name='default'):
         }
     
     # Create database tables if they don't exist
-    with app.app_context():
-        db.create_all()
+    # Only create tables in development or production, not during testing
+    if config_name != 'testing':
+        with app.app_context():
+            db.create_all()
     
     return app 
 

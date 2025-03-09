@@ -44,20 +44,23 @@ class RouteTestCase(BaseTestCase):
         self.assertIn(b'Correlation Analysis', response.data)
     
     def test_data_route(self):
-        """Test the data management route (mock test)."""
+        """Test the data overview route (mock test)."""
         # Create a test data source
         source = DataType(
             source='test_source',
             metric_name='source_info',
-            source_type='test',
-            last_import=datetime.now()
+            source_type='api'
         )
         db.session.add(source)
         db.session.commit()
         
-        response = self.client.get('/data')
+        response = self.client.get('/data/')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'Data Management', response.data)
+        self.assertIn(b'Data Overview', response.data)
+        
+        # Clean up
+        db.session.delete(source)
+        db.session.commit()
     
     def test_data_import_route(self):
         """Test that the data import route returns a 200 status code."""
@@ -427,4 +430,335 @@ class RouteTestCase(BaseTestCase):
         self.assertEqual(response.status_code, 200)
         
         # Verify the page contains a message about no data
-        self.assertIn(b'No health data found for December 31, 2099', response.data) 
+        self.assertIn(b'No health data found for December 31, 2099', response.data)
+    
+    # Tests from test_browse_route.py
+    def test_browse_with_calorie_filter(self):
+        """Test that browse route correctly filters by calories."""
+        # Create test data types
+        dt_energy = DataType(
+            source='chronometer',
+            metric_name='Energy (kcal)',
+            metric_units='kcal',
+            source_type='csv'
+        )
+        
+        dt_sleep = DataType(
+            source='oura',
+            metric_name='sleep_duration',
+            metric_units='hours',
+            source_type='api'
+        )
+        
+        db.session.add_all([dt_energy, dt_sleep])
+        db.session.commit()
+        
+        # Create test health data
+        # Day 1 - high calories
+        day1 = date.today() - timedelta(days=2)
+        energy_day1 = HealthData(
+            date=day1,
+            data_type_id=dt_energy.id,
+            metric_value=2500.0
+        )
+        
+        sleep_day1 = HealthData(
+            date=day1,
+            data_type_id=dt_sleep.id,
+            metric_value=7.5
+        )
+        
+        # Day 2 - low calories
+        day2 = date.today() - timedelta(days=1)
+        energy_day2 = HealthData(
+            date=day2,
+            data_type_id=dt_energy.id,
+            metric_value=1500.0
+        )
+        
+        sleep_day2 = HealthData(
+            date=day2,
+            data_type_id=dt_sleep.id,
+            metric_value=8.0
+        )
+        
+        db.session.add_all([energy_day1, sleep_day1, energy_day2, sleep_day2])
+        db.session.commit()
+        
+        # Test with max calories = 2000 (should only show day2 data)
+        response = self.client.get('/data/browse?max_calories=2000')
+        self.assertEqual(response.status_code, 200)
+        
+        # Day 2 data should be included
+        self.assertIn(f'>{day2.strftime("%Y-%m-%d")}<', response.data.decode('utf-8'))
+        self.assertIn('>1500.0<', response.data.decode('utf-8'))
+        self.assertIn('>8.0<', response.data.decode('utf-8'))
+        
+        # Day 1 data should NOT be included
+        self.assertNotIn(f'>{day1.strftime("%Y-%m-%d")}<', response.data.decode('utf-8'))
+        self.assertNotIn('>2500.0<', response.data.decode('utf-8'))
+        self.assertNotIn('>7.5<', response.data.decode('utf-8'))
+        
+        # Clean up
+        self._clear_test_data()
+        db.session.delete(dt_energy)
+        db.session.delete(dt_sleep)
+        db.session.commit()
+        
+    def test_browse_without_calorie_filter(self):
+        """Test that browse route shows all data without calorie filter."""
+        # Create test data types
+        dt_energy = DataType(
+            source='chronometer',
+            metric_name='Energy (kcal)',
+            metric_units='kcal',
+            source_type='csv'
+        )
+        
+        dt_sleep = DataType(
+            source='oura',
+            metric_name='sleep_duration',
+            metric_units='hours',
+            source_type='api'
+        )
+        
+        db.session.add_all([dt_energy, dt_sleep])
+        db.session.commit()
+        
+        # Create test health data
+        # Day 1 - high calories
+        day1 = date.today() - timedelta(days=2)
+        energy_day1 = HealthData(
+            date=day1,
+            data_type_id=dt_energy.id,
+            metric_value=2500.0
+        )
+        
+        sleep_day1 = HealthData(
+            date=day1,
+            data_type_id=dt_sleep.id,
+            metric_value=7.5
+        )
+        
+        # Day 2 - low calories
+        day2 = date.today() - timedelta(days=1)
+        energy_day2 = HealthData(
+            date=day2,
+            data_type_id=dt_energy.id,
+            metric_value=1500.0
+        )
+        
+        sleep_day2 = HealthData(
+            date=day2,
+            data_type_id=dt_sleep.id,
+            metric_value=8.0
+        )
+        
+        db.session.add_all([energy_day1, sleep_day1, energy_day2, sleep_day2])
+        db.session.commit()
+        
+        response = self.client.get('/data/browse')
+        self.assertEqual(response.status_code, 200)
+        
+        # Both days' data should be included
+        self.assertIn(f'>{day1.strftime("%Y-%m-%d")}<', response.data.decode('utf-8'))
+        self.assertIn(f'>{day2.strftime("%Y-%m-%d")}<', response.data.decode('utf-8'))
+        self.assertIn('>2500.0<', response.data.decode('utf-8'))
+        self.assertIn('>1500.0<', response.data.decode('utf-8'))
+        self.assertIn('>7.5<', response.data.decode('utf-8'))
+        self.assertIn('>8.0<', response.data.decode('utf-8'))
+        
+        # Clean up
+        self._clear_test_data()
+        db.session.delete(dt_energy)
+        db.session.delete(dt_sleep)
+        db.session.commit()
+    
+    # Tests from test_data_types_routes.py
+    def test_data_types_route(self):
+        """Test that the data types route returns a 200 status code and shows all data types."""
+        # Create some test data types
+        dt1 = DataType(
+            source='test_source',
+            metric_name='test_metric',
+            metric_units='test_units',
+            source_type='api'
+        )
+        
+        dt2 = DataType(
+            source='test_source',
+            metric_name='another_metric',
+            metric_units='another_units',
+            source_type='csv'
+        )
+        
+        dt3 = DataType(
+            source='test_source_with_data',
+            metric_name='metric_with_data',
+            metric_units='units',
+            source_type='manual'
+        )
+        
+        db.session.add_all([dt1, dt2, dt3])
+        db.session.commit()
+        
+        response = self.client.get('/data/data-types')
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that all test data types are displayed
+        self.assertIn(b'test_source', response.data)
+        self.assertIn(b'test_metric', response.data)
+        self.assertIn(b'another_metric', response.data)
+        self.assertIn(b'test_source_with_data', response.data)
+        
+        # Clean up
+        db.session.delete(dt1)
+        db.session.delete(dt2)
+        db.session.delete(dt3)
+        db.session.commit()
+    
+    def test_edit_data_type_get(self):
+        """Test that the edit data type route returns a 200 status code and the correct form."""
+        # Create a test data type
+        dt1 = DataType(
+            source='test_source',
+            metric_name='test_metric',
+            metric_units='test_units',
+            source_type='api'
+        )
+        
+        db.session.add(dt1)
+        db.session.commit()
+        
+        response = self.client.get(f'/data/data-types/edit/{dt1.id}')
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that the form contains the correct data
+        self.assertIn(b'test_source', response.data)
+        self.assertIn(b'test_metric', response.data)
+        self.assertIn(b'test_units', response.data)
+        self.assertIn(b'api', response.data)
+        
+        # Clean up
+        db.session.delete(dt1)
+        db.session.commit()
+    
+    def test_edit_data_type_post(self):
+        """Test that the edit data type route correctly updates a data type."""
+        # Create a test data type
+        dt1 = DataType(
+            source='test_source',
+            metric_name='test_metric',
+            metric_units='test_units',
+            source_type='api'
+        )
+        
+        db.session.add(dt1)
+        db.session.commit()
+        
+        response = self.client.post(
+            f'/data/data-types/edit/{dt1.id}',
+            data={
+                'source': 'updated_source',
+                'metric_name': 'updated_metric',
+                'metric_units': 'updated_units',
+                'source_type': 'csv'
+            },
+            follow_redirects=True
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that the data was updated in the database
+        updated_dt = DataType.query.get(dt1.id)
+        self.assertEqual(updated_dt.source, 'updated_source')
+        self.assertEqual(updated_dt.metric_name, 'updated_metric')
+        self.assertEqual(updated_dt.metric_units, 'updated_units')
+        self.assertEqual(updated_dt.source_type, 'csv')
+        
+        # Check for success message
+        self.assertIn(b'Successfully updated data type', response.data)
+        
+        # Clean up
+        db.session.delete(updated_dt)
+        db.session.commit()
+    
+    def test_delete_data_type(self):
+        """Test that the delete data type route correctly deletes a data type without data."""
+        # Create a test data type
+        dt2 = DataType(
+            source='test_source',
+            metric_name='another_metric',
+            metric_units='another_units',
+            source_type='csv'
+        )
+        
+        db.session.add(dt2)
+        db.session.commit()
+        
+        response = self.client.post(
+            f'/data/data-types/delete/{dt2.id}',
+            follow_redirects=True
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that the data type is gone from the database
+        deleted_dt = DataType.query.get(dt2.id)
+        self.assertIsNone(deleted_dt)
+        
+        # Check for success message
+        self.assertIn(b'Successfully deleted data type', response.data)
+    
+    def test_delete_data_type_with_data(self):
+        """Test that the delete data type route prevents deletion of data types with associated data."""
+        # Create a test data type with associated health data
+        dt3 = DataType(
+            source='test_source_with_data',
+            metric_name='metric_with_data',
+            metric_units='units',
+            source_type='manual'
+        )
+        
+        db.session.add(dt3)
+        db.session.commit()
+        
+        # Create some health data associated with dt3
+        health_data = HealthData(
+            date=date.today(),
+            data_type_id=dt3.id,
+            metric_value=10.5,
+            notes="Test data"
+        )
+        
+        db.session.add(health_data)
+        db.session.commit()
+        
+        response = self.client.post(
+            f'/data/data-types/delete/{dt3.id}',
+            follow_redirects=True
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that the data type still exists in the database
+        not_deleted_dt = DataType.query.get(dt3.id)
+        self.assertIsNotNone(not_deleted_dt)
+        
+        # Check for error message
+        self.assertIn(b'Cannot delete data type that has', response.data)
+        
+        # Clean up
+        db.session.delete(health_data)
+        db.session.delete(dt3)
+        db.session.commit()
+    
+    def test_data_type_not_found(self):
+        """Test that the edit and delete routes return 404 for non-existent data types."""
+        # Test edit route
+        response = self.client.get('/data/data-types/edit/9999')
+        self.assertEqual(response.status_code, 404)
+        
+        # Test delete route
+        response = self.client.post('/data/data-types/delete/9999')
+        self.assertEqual(response.status_code, 404) 
