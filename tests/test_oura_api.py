@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from tests.test_base import BaseTestCase
 from app.models.base import HealthData, ImportRecord, DataType
 from app.utils.oura_importer import OuraImporter
+from app import db
 
 class MockOuraResponse:
     """Mock response object for testing"""
@@ -122,6 +123,26 @@ class OuraAPITestCase(BaseTestCase):
                         "min": 0.9,
                         "max": 3.8
                     }
+                }
+            ]
+        }
+        
+        # Mock stress data
+        self.mock_stress_data = {
+            "data": [
+                {
+                    "id": "abc123",
+                    "day": "2023-01-01",
+                    "stress_high": 65,
+                    "recovery_high": 35,
+                    "day_summary": "strained"
+                },
+                {
+                    "id": "def456",
+                    "day": "2023-01-02",
+                    "stress_high": 45,
+                    "recovery_high": 55,
+                    "day_summary": "balanced"
                 }
             ]
         }
@@ -244,6 +265,60 @@ class OuraAPITestCase(BaseTestCase):
         self.assertIsNotNone(source)
         self.assertEqual(source.source_type, 'api')
     
+    @patch('app.utils.oura_importer.requests.get')
+    def test_import_stress_data(self, mock_get):
+        """Test importing stress data from the Oura API."""
+        # Create a mock response with test data
+        mock_get.return_value = MockOuraResponse(json_data=self.mock_stress_data)
+        
+        # Initialize the importer
+        importer = OuraImporter(self.personal_token)
+        
+        # Import data
+        result = importer.import_stress_data(self.start_date, self.end_date)
+        
+        # Verify the result is a list of processed data points
+        self.assertIsInstance(result, list)
+        self.assertGreater(len(result), 0)
+        
+        # Verify data was imported correctly (test a sample of metrics)
+        # First, get the DataType objects for the metrics we want to check
+        stress_high_type = DataType.query.filter_by(
+            source='oura',
+            metric_name='stress_high'
+        ).first()
+        
+        recovery_high_type = DataType.query.filter_by(
+            source='oura',
+            metric_name='recovery_high'
+        ).first()
+        
+        # Verify the DataType objects exist
+        self.assertIsNotNone(stress_high_type)
+        self.assertIsNotNone(recovery_high_type)
+        
+        # Check that we have data for stress_high and recovery_high
+        stress_high_data = HealthData.query.filter_by(
+            data_type_id=stress_high_type.id
+        ).all()
+        self.assertEqual(len(stress_high_data), 2)  # Should have 2 days of data
+        
+        recovery_high_data = HealthData.query.filter_by(
+            data_type_id=recovery_high_type.id
+        ).all()
+        self.assertEqual(len(recovery_high_data), 2)  # Should have 2 days of data
+        
+        # Check the values
+        self.assertEqual(stress_high_data[0].metric_value, 65)
+        self.assertEqual(stress_high_data[1].metric_value, 45)
+        self.assertEqual(recovery_high_data[0].metric_value, 35)
+        self.assertEqual(recovery_high_data[1].metric_value, 55)
+        
+        # Check that a data source was added
+        source = DataType.query.filter_by(source='oura', metric_name='source_info').first()
+        self.assertIsNotNone(source)
+        self.assertEqual(source.source_type, 'api')
+    
     def test_connect_oura_form(self):
         """Test the form for entering an Oura personal token."""
         response = self.client.get('/data/connect/oura')
@@ -266,33 +341,48 @@ class OuraAPITestCase(BaseTestCase):
     @patch('app.utils.oura_importer.requests.get')
     def test_import_oura_route(self, mock_get):
         """Test the import Oura data route with personal token."""
-        # Configure mock responses
-        mock_get.side_effect = [
-            MockOuraResponse(json_data=self.mock_daily_sleep_data),
-            MockOuraResponse(json_data=self.mock_sleep_data)
-        ]
+        # Configure mock responses for different data types
+        mock_responses = {
+            'sleep': [
+                MockOuraResponse(json_data=self.mock_daily_sleep_data),
+                MockOuraResponse(json_data=self.mock_sleep_data)
+            ],
+            'activity': [MockOuraResponse(json_data=self.mock_activity_data)],
+            'stress': [MockOuraResponse(json_data=self.mock_stress_data)]
+        }
         
-        # Mock session data
-        with self.client.session_transaction() as session:
-            session['oura_connected'] = True
-            session['oura_personal_token'] = self.personal_token
+        for data_type, responses in mock_responses.items():
+            # Reset mock and set responses for this test
+            mock_get.reset_mock()
+            mock_get.side_effect = responses
         
-        # Test the import route with valid data
-        response = self.client.post('/data/import/oura', data={
-            'start_date': self.start_date,
-            'end_date': self.end_date,
-            'data_type': 'sleep'
-        }, follow_redirects=True)
-        
-        # Check that the import was successful
-        self.assertEqual(response.status_code, 200)
-        
-        # Verify import record was created
-        import_record = ImportRecord.query.filter_by(source='oura').first()
-        self.assertIsNotNone(import_record)
-        self.assertEqual(import_record.status, 'success')
-        self.assertEqual(import_record.date_range_start, date(2023, 1, 1))
-        self.assertEqual(import_record.date_range_end, date(2023, 1, 7))
-        
+            # Mock session data
+            with self.client.session_transaction() as session:
+                session['oura_connected'] = True
+                session['oura_personal_token'] = self.personal_token
+            
+            # Test the import route with valid data
+            response = self.client.post('/data/import/oura', data={
+                'start_date': self.start_date,
+                'end_date': self.end_date,
+                'data_type': data_type
+            }, follow_redirects=True)
+            
+            # Check that the import was successful
+            self.assertEqual(response.status_code, 200)
+            
+            # Verify import record was created
+            import_record = ImportRecord.query.filter_by(source='oura').first()
+            self.assertIsNotNone(import_record)
+            self.assertEqual(import_record.status, 'success')
+            self.assertEqual(import_record.date_range_start, date(2023, 1, 1))
+            self.assertEqual(import_record.date_range_end, date(2023, 1, 7))
+            
+            # Clear records for next test
+            db.session.query(ImportRecord).delete()
+            db.session.query(HealthData).delete()
+            db.session.query(DataType).delete()
+            db.session.commit()
+
 if __name__ == '__main__':
     unittest.main() 

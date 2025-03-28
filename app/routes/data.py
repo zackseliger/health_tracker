@@ -729,6 +729,18 @@ def import_oura():
                 current_app.logger.error(f"Error importing tag data: {str(e)}")
                 flash(f'Note: Tag data import failed, but other data were imported if selected: {str(e)}', 'warning')
         
+        # Import stress data
+        if data_type == 'stress' or data_type == 'all':
+            try:
+                current_app.logger.info(f"Starting stress data import: {start_date} to {end_date}")
+                stress_data = importer.import_stress_data(start_date, end_date)
+                imported_data.extend(stress_data)
+                current_app.logger.info(f"Stress data import completed: {len(stress_data)} records")
+                flash(f'Successfully imported {len(stress_data)} Oura stress data points', 'success')
+            except Exception as e:
+                current_app.logger.error(f"Error importing stress data: {str(e)}")
+                flash(f'Error importing stress data: {str(e)}', 'error')
+        
         # Create import record
         import_record = ImportRecord(
             source='oura',
@@ -767,7 +779,15 @@ def import_oura():
                 DataType.metric_name.like('tag_%')
             ).count()
             
-            current_app.logger.info(f"Database counts - Sleep: {sleep_count}, Activity: {activity_count}, Tags: {tag_count}")
+            # Count stress records
+            stress_count = db.session.query(HealthData).join(
+                DataType, HealthData.data_type_id == DataType.id
+            ).filter(
+                DataType.source == 'oura',
+                DataType.metric_name.in_(['stress_high', 'recovery_high'])
+            ).count()
+            
+            current_app.logger.info(f"Database counts - Sleep: {sleep_count}, Activity: {activity_count}, Tags: {tag_count}, Stress: {stress_count}")
         
     except Exception as e:
         current_app.logger.error(f"Error importing Oura API data: {e}")

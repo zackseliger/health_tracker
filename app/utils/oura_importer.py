@@ -99,7 +99,7 @@ class OuraImporter:
             if 'contributors' in day and 'total_sleep' in day['contributors']:
                 processed_data.append({
                     'date': date_obj,
-                    'metric_name': 'total_sleep',
+                    'metric_name': 'total_sleep_score',
                     'metric_value': day['contributors']['total_sleep'],
                     'metric_units': 'score'
                 })
@@ -107,8 +107,32 @@ class OuraImporter:
             if 'contributors' in day and 'latency' in day['contributors']:
                 processed_data.append({
                     'date': date_obj,
-                    'metric_name': 'sleep_latency',
+                    'metric_name': 'sleep_latency_score',
                     'metric_value': day['contributors']['latency'],
+                    'metric_units': 'score'
+                })
+
+            if 'contributors' in day and 'efficiency' in day['contributors']:
+                processed_data.append({
+                    'date': date_obj,
+                    'metric_name': 'sleep_efficiency_score',
+                    'metric_value': day['contributors']['efficiency'],
+                    'metric_units': 'score'
+                })
+
+            if 'contributors' in day and 'restfulness' in day['contributors']:
+                processed_data.append({
+                    'date': date_obj,
+                    'metric_name': 'sleep_restfulness_score',
+                    'metric_value': day['contributors']['restfulness'],
+                    'metric_units': 'score'
+                })
+
+            if 'contributors' in day and 'timing' in day['contributors']:
+                processed_data.append({
+                    'date': date_obj,
+                    'metric_name': 'sleep_timing_score',
+                    'metric_value': day['contributors']['timing'],
                     'metric_units': 'score'
                 })
                 
@@ -137,10 +161,19 @@ class OuraImporter:
         
         # Track sleep stage totals for each day
         long_hr = {}
+        lowest_hr = {}
         long_hrv = {}
         long_resp = {}
         long_efficiency = {}
         long_readiness = {}
+        activity_balance_score = {}
+        body_temperature_score = {}
+        hrv_balance_score = {}
+        previous_day_activity_score = {}
+        previous_night_score = {}
+        recovery_index_score = {}
+        resting_heart_rate_score = {}
+        sleep_balance_score = {}
         
         for sleep in sleep_data.get('data', []):
             day = sleep.get('day')
@@ -175,12 +208,23 @@ class OuraImporter:
                     long_hrv[day] = sleep['average_hrv']
                 if sleep.get('average_heart_rate') is not None:
                     long_hr[day] = sleep['average_heart_rate']
+                if sleep.get('lowest_heart_rate') is not None:
+                    lowest_hr[day] = sleep['lowest_heart_rate']
                 if sleep.get('average_breath') is not None:
                     long_resp[day] = sleep['average_breath']
                 if sleep.get('efficiency') is not None:
                     long_efficiency[day] = sleep['efficiency']
                 if sleep.get('readiness', {}).get('score') is not None:
                     long_readiness[day] = sleep['readiness']['score']
+                if sleep.get('readiness', {}).get('contributors', {}) is not None:
+                    activity_balance_score[day] = sleep['readiness']['contributors']['activity_balance']
+                    body_temperature_score[day] = sleep['readiness']['contributors']['body_temperature']
+                    hrv_balance_score[day] = sleep['readiness']['contributors']['hrv_balance']
+                    previous_day_activity_score[day] = sleep['readiness']['contributors']['previous_day_activity']
+                    previous_night_score[day] = sleep['readiness']['contributors']['previous_night']
+                    recovery_index_score[day] = sleep['readiness']['contributors']['recovery_index']
+                    resting_heart_rate_score[day] = sleep['readiness']['contributors']['resting_heart_rate']
+                    sleep_balance_score[day] = sleep['readiness']['contributors']['sleep_balance']
         
         # Process metrics for each day
         for day, rem_sleep_duration in day_to_rem_sleep.items():
@@ -291,6 +335,14 @@ class OuraImporter:
                     'metric_units': 'bpm'
                 })
             
+            if day in lowest_hr:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'lowest_hr',
+                    'metric_value': lowest_hr[day],
+                    'metric_units': 'bpm'
+                })
+            
             if day in long_hrv:
                 processed_data.append({
                     'date': day_obj,
@@ -318,8 +370,72 @@ class OuraImporter:
             if day in long_readiness:
                 processed_data.append({
                     'date': day_obj,
-                    'metric_name': 'long_readiness',
+                    'metric_name': 'readiness_score',
                     'metric_value': long_readiness[day],
+                    'metric_units': 'score'
+                })
+
+            if day in activity_balance_score:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'activity_balance_score',
+                    'metric_value': activity_balance_score[day],
+                    'metric_units': 'score'
+                })
+
+            if day in body_temperature_score:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'body_temperature_score',
+                    'metric_value': body_temperature_score[day],
+                    'metric_units': 'score'
+                })
+
+            if day in hrv_balance_score:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'hrv_balance_score',
+                    'metric_value': hrv_balance_score[day],
+                    'metric_units': 'score'
+                })
+
+            if day in previous_day_activity_score:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'previous_day_activity_score',
+                    'metric_value': previous_day_activity_score[day],
+                    'metric_units': 'score'
+                })
+
+            if day in previous_night_score:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'previous_night_score',
+                    'metric_value': previous_night_score[day],
+                    'metric_units': 'score'
+                })
+
+            if day in recovery_index_score:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'recovery_index_score',
+                    'metric_value': recovery_index_score[day],
+                    'metric_units': 'score'
+                })
+
+            if day in resting_heart_rate_score:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'resting_heart_rate_score',
+                    'metric_value': resting_heart_rate_score[day],
+                    'metric_units': 'score'
+                })
+
+            if day in sleep_balance_score:
+                processed_data.append({
+                    'date': day_obj,
+                    'metric_name': 'sleep_balance_score',
+                    'metric_value': sleep_balance_score[day],
                     'metric_units': 'score'
                 })
         
@@ -329,10 +445,17 @@ class OuraImporter:
         """Store processed data in the database"""
         records_added = 0
         records_updated = 0
+        records_skipped = 0
         metrics_by_type = {}
         dates_range = set()
         
         for item in processed_data:
+            # Skip items with null metric_value
+            if item.get('metric_value') is None:
+                current_app.logger.warning(f"Skipping record with null metric_value: {item}")
+                records_skipped += 1
+                continue
+                
             # Track metrics for reporting
             metric_name = item.get('metric_name', 'unknown')
             if metric_name not in metrics_by_type:
@@ -389,7 +512,7 @@ class OuraImporter:
             max_date = max(dates_range)
             date_range_str = f" (date range: {min_date} to {max_date})"
         
-        current_app.logger.info(f"Imported {source} data: {records_added} new records, {records_updated} updated records{date_range_str}")
+        current_app.logger.info(f"Imported {source} data: {records_added} new records, {records_updated} updated records, {records_skipped} skipped records{date_range_str}")
         
         # Log breakdown by metric type
         if metrics_by_type:
@@ -491,31 +614,13 @@ class OuraImporter:
                     'metric_units': 'meters'
                 })
             
-            # Store daily movement
-            if 'daily_movement' in day:
-                processed_data.append({
-                    'date': date_obj,
-                    'metric_name': 'daily_movement',
-                    'metric_value': day['daily_movement'],
-                    'metric_units': 'meters'
-                })
-            
             # Store inactive time
-            if 'inactive_time' in day:
+            if 'sedentary_time' in day:
                 processed_data.append({
                     'date': date_obj,
-                    'metric_name': 'inactive_time',
-                    'metric_value': day['inactive_time'],
-                    'metric_units': 'seconds'
-                })
-            
-            # Store rest time
-            if 'rest_time' in day:
-                processed_data.append({
-                    'date': date_obj,
-                    'metric_name': 'rest_time',
-                    'metric_value': day['rest_time'],
-                    'metric_units': 'seconds'
+                    'metric_name': 'sedentary_time',
+                    'metric_value': day['sedentary_time'] / 3600, # seconds to hours
+                    'metric_units': 'hours'
                 })
             
             # Store met levels if available
@@ -545,7 +650,55 @@ class OuraImporter:
                         'metric_value': met_data['max'],
                         'metric_units': 'met'
                     })
-        
+
+            if 'contributors' in day and 'meet_daily_targets' in day['contributors']:
+                processed_data.append({
+                    'date': date_obj,
+                    'metric_name': 'meet_daily_targets_score',
+                    'metric_value': day['contributors']['meet_daily_targets'],
+                    'metric_units': 'score'
+                })
+
+            if 'contributors' in day and 'move_every_hour' in day['contributors']:
+                processed_data.append({
+                    'date': date_obj,
+                    'metric_name': 'move_every_hour_score',
+                    'metric_value': day['contributors']['move_every_hour'],
+                    'metric_units': 'score'
+                })
+
+            if 'contributors' in day and 'recovery_time' in day['contributors']:
+                processed_data.append({
+                    'date': date_obj,
+                    'metric_name': 'recovery_time_score',
+                    'metric_value': day['contributors']['recovery_time'],
+                    'metric_units': 'score'
+                })
+
+            if 'contributors' in day and 'stay_active' in day['contributors']:
+                processed_data.append({
+                    'date': date_obj,
+                    'metric_name': 'stay_active_score',
+                    'metric_value': day['contributors']['stay_active'],
+                    'metric_units': 'score'
+                })
+
+            if 'contributors' in day and 'training_frequency' in day['contributors']:
+                processed_data.append({
+                    'date': date_obj,
+                    'metric_name': 'training_frequency_score',
+                    'metric_value': day['contributors']['training_frequency'],
+                    'metric_units': 'score'
+                })
+
+            if 'contributors' in day and 'training_volume' in day['contributors']:
+                processed_data.append({
+                    'date': date_obj,
+                    'metric_name': 'training_volume_score',
+                    'metric_value': day['contributors']['training_volume'],
+                    'metric_units': 'score'
+                })
+
         return processed_data
 
     def import_tags_data(self, start_date, end_date):
@@ -683,6 +836,66 @@ class OuraImporter:
         
         return processed_data
     
+    def import_stress_data(self, start_date, end_date):
+        """Import daily stress data from Oura API"""
+        params = {
+            "start_date": start_date,
+            "end_date": end_date
+        }
+        
+        # Get daily stress data
+        stress_data = self._get_data("/v2/usercollection/daily_stress", params)
+        
+        # Process and store the data
+        processed_data = self._process_stress_data(stress_data)
+        self._store_data(processed_data, 'oura')
+        
+        # Update data source record
+        self._update_data_source('oura')
+        
+        return processed_data
+    
+    def _process_stress_data(self, stress_data):
+        """Process raw Oura stress data into a format for our database"""
+        processed_data = []
+        
+        # Process daily stress metrics
+        for day in stress_data.get('data', []):
+            date = day.get('day')
+            if not date:
+                continue
+                
+            # Convert string date to datetime
+            try:
+                date_obj = datetime.strptime(date, "%Y-%m-%d").date()
+            except ValueError:
+                current_app.logger.error(f"Invalid date format: {date}")
+                continue
+            
+            # Store stress_high metric
+            if 'stress_high' in day:
+                processed_data.append({
+                    'date': date_obj,
+                    'metric_name': 'stress_high',
+                    'metric_value': day['stress_high'],
+                    'metric_units': 'score'
+                })
+            
+            # Store recovery_high metric
+            if 'recovery_high' in day:
+                processed_data.append({
+                    'date': date_obj,
+                    'metric_name': 'recovery_high',
+                    'metric_value': day['recovery_high'],
+                    'metric_units': 'score'
+                })
+            
+            # Store day_summary if available
+            # We skip this because it's a string value and our database needs numeric values
+            # If needed in the future, we could convert it to a numeric code or create a separate table
+        
+        return processed_data
+    
     def diagnostic_check(self, start_date, end_date):
         """Run diagnostic checks to identify potential issues with data import"""
         diagnostics = {
@@ -710,7 +923,8 @@ class OuraImporter:
             "/v2/usercollection/daily_sleep",
             "/v2/usercollection/sleep",
             "/v2/usercollection/daily_activity",
-            "/v2/usercollection/enhanced_tag"
+            "/v2/usercollection/enhanced_tag",
+            "/v2/usercollection/daily_stress"
         ]
         
         params = {
