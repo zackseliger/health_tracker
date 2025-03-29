@@ -402,10 +402,10 @@ class AnalyzerTestCase(BaseTestCase):
                 # Third element should be a string
                 self.assertIsInstance(data_point[2], str)
             
-        # Check date filtering
-        today = date.today()
-        start_date = today - timedelta(days=15)
-        end_date = today - timedelta(days=5)
+        # Check date filtering - use the test data's date range
+        test_end_date = date(2025, 3, 1)
+        start_date = test_end_date - timedelta(days=15)
+        end_date = test_end_date - timedelta(days=5)
         
         filtered_data = self.analyzer.get_metric_data(
             'sleep_score', 'oura',
@@ -434,9 +434,9 @@ class AnalyzerTestCase(BaseTestCase):
     def test_calculate_correlation_with_date_range(self):
         """Test calculating correlation within a specific date range."""
         # Calculate correlation with a date range
-        today = date.today()
-        start_date = today - timedelta(days=20)
-        end_date = today - timedelta(days=10)
+        test_end_date = date(2025, 3, 1)
+        start_date = test_end_date - timedelta(days=20)
+        end_date = test_end_date - timedelta(days=10)
         
         correlation = self.analyzer.calculate_correlation(
             'sleep_score', 'oura',

@@ -23,7 +23,7 @@
 </div>
 
 <div class="row mt-5">
-    <div class="col-md-4">
+    <div class="col-md-6">
         <div class="card h-100">
             <div class="card-body text-center">
                 <i class="fas fa-ring fa-3x mb-3 text-primary"></i>
@@ -33,23 +33,13 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-6">
         <div class="card h-100">
             <div class="card-body text-center">
                 <i class="fas fa-utensils fa-3x mb-3 text-success"></i>
                 <h3 class="card-title">Chronometer Integration</h3>
                 <p class="card-text">Import nutrition data from Chronometer CSV exports to track nutrients, calories, and more.</p>
                 <a href="{{ url_for('data.import_data') }}" class="btn btn-outline-success">Import Chronometer Data</a>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <i class="fas fa-plus-circle fa-3x mb-3 text-danger"></i>
-                <h3 class="card-title">Custom Metrics</h3>
-                <p class="card-text">Add your own custom health metrics like bloodwork results, symptoms, medication, and more.</p>
-                <a href="{{ url_for('data.custom_metrics') }}" class="btn btn-outline-danger">Manage Custom Metrics</a>
             </div>
         </div>
     </div>

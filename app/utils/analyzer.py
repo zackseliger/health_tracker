@@ -182,7 +182,9 @@ class HealthAnalyzer:
             'total_sleep', 'sleep_latency', 'awake_time', 'rem_sleep_score',
             'deep_sleep_score', 'sleep_efficiency', 'avg_hr', 'avg_hrv',
             'avg_resp', 'long_hr', 'long_hrv', 'long_resp', 'long_efficiency',
-            'long_readiness', 'long_efficiency'
+            'long_readiness', 'long_efficiency', 'total_sleep_score', 
+            'sleep_latency_score', 'sleep_efficiency_score', 'sleep_restfulness_score',
+            'sleep_timing_score'
         ]
         
         # Get data for both metrics, including derived metrics if needed

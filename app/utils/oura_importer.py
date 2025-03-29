@@ -145,8 +145,6 @@ class OuraImporter:
         # Process detailed sleep sessions
         day_hr_data = {}
         day_hrv_data = {}
-        day_hr_data2 = {}
-        day_hrv_data2 = {}
         day_avg_resp = {}
         day_time_asleep = {}
         
@@ -154,8 +152,6 @@ class OuraImporter:
         for day in day_to_rem_sleep.keys():
             day_hr_data[day] = []
             day_hrv_data[day] = []
-            day_hr_data2[day] = []
-            day_hrv_data2[day] = []
             day_avg_resp[day] = []
             day_time_asleep[day] = []
         
@@ -184,8 +180,8 @@ class OuraImporter:
                 sleep.get('average_hrv') is not None and 
                 sleep.get('average_breath') is not None):
                 
-                day_hr_data2[day].append(sleep['average_heart_rate'])
-                day_hrv_data2[day].append(sleep['average_hrv'])
+                day_hr_data[day].append(sleep['average_heart_rate'])
+                day_hrv_data[day].append(sleep['average_hrv'])
                 day_avg_resp[day].append(sleep['average_breath'])
                 day_time_asleep[day].append(sleep.get('time_in_bed', 0))
             
@@ -216,15 +212,24 @@ class OuraImporter:
                     long_efficiency[day] = sleep['efficiency']
                 if sleep.get('readiness', {}).get('score') is not None:
                     long_readiness[day] = sleep['readiness']['score']
-                if sleep.get('readiness', {}).get('contributors', {}) is not None:
-                    activity_balance_score[day] = sleep['readiness']['contributors']['activity_balance']
-                    body_temperature_score[day] = sleep['readiness']['contributors']['body_temperature']
-                    hrv_balance_score[day] = sleep['readiness']['contributors']['hrv_balance']
-                    previous_day_activity_score[day] = sleep['readiness']['contributors']['previous_day_activity']
-                    previous_night_score[day] = sleep['readiness']['contributors']['previous_night']
-                    recovery_index_score[day] = sleep['readiness']['contributors']['recovery_index']
-                    resting_heart_rate_score[day] = sleep['readiness']['contributors']['resting_heart_rate']
-                    sleep_balance_score[day] = sleep['readiness']['contributors']['sleep_balance']
+                if sleep.get('readiness', {}).get('contributors') is not None:
+                    readiness_contributors = sleep['readiness']['contributors']
+                    if 'activity_balance' in readiness_contributors:
+                        activity_balance_score[day] = sleep['readiness']['contributors']['activity_balance']
+                    if 'body_temperature' in readiness_contributors:
+                        body_temperature_score[day] = sleep['readiness']['contributors']['body_temperature']
+                    if 'hrv_balance' in readiness_contributors:
+                        hrv_balance_score[day] = sleep['readiness']['contributors']['hrv_balance']
+                    if 'previous_day_activity' in readiness_contributors:
+                        previous_day_activity_score[day] = sleep['readiness']['contributors']['previous_day_activity']
+                    if 'previous_night' in readiness_contributors:
+                        previous_night_score[day] = sleep['readiness']['contributors']['previous_night']
+                    if 'recovery_index' in readiness_contributors:
+                        recovery_index_score[day] = sleep['readiness']['contributors']['recovery_index']
+                    if 'resting_heart_rate' in readiness_contributors:
+                        resting_heart_rate_score[day] = sleep['readiness']['contributors']['resting_heart_rate']
+                    if 'sleep_balance' in readiness_contributors:
+                        sleep_balance_score[day] = sleep['readiness']['contributors']['sleep_balance']
         
         # Process metrics for each day
         for day, rem_sleep_duration in day_to_rem_sleep.items():
@@ -242,27 +247,10 @@ class OuraImporter:
             # Process heart rate and HRV data
             if day_time_asleep[day]:  # Make sure we have data
                 total_time_asleep = sum(day_time_asleep[day])
-                for i in range(len(day_hr_data2[day])):
-                    avg_hr2 += day_hr_data2[day][i] * (day_time_asleep[day][i] / total_time_asleep)
-                    avg_hrv2 += day_hrv_data2[day][i] * (day_time_asleep[day][i] / total_time_asleep)
+                for i in range(len(day_hr_data[day])):
+                    avg_hr2 += day_hr_data[day][i] * (day_time_asleep[day][i] / total_time_asleep)
+                    avg_hrv2 += day_hrv_data[day][i] * (day_time_asleep[day][i] / total_time_asleep)
                     avg_resp += day_avg_resp[day][i] * (day_time_asleep[day][i] / total_time_asleep)
-                
-                # Store heart rate metrics
-                if day_hr_data[day]:
-                    processed_data.append({
-                        'date': day_obj,
-                        'metric_name': 'avg_hr_alt',
-                        'metric_value': sum(day_hr_data[day]) / len(day_hr_data[day]) if day_hr_data[day] else 0,
-                        'metric_units': 'bpm'
-                    })
-                
-                if day_hrv_data[day]:
-                    processed_data.append({
-                        'date': day_obj,
-                        'metric_name': 'avg_hrv_alt',
-                        'metric_value': sum(day_hrv_data[day]) / len(day_hrv_data[day]) if day_hrv_data[day] else 0,
-                        'metric_units': 'ms'
-                    })
                 
                 processed_data.append({
                     'date': day_obj,
