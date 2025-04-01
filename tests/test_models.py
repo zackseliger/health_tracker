@@ -4,9 +4,10 @@ import os
 # Add the parent directory to the path to make app importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from sqlalchemy.exc import IntegrityError
 from tests.test_base import BaseTestCase
 from app import db
-from app.models.base import HealthData, UserDefinedMetric, DataType
+from app.models.base import HealthData, DataType, ImportRecord
 
 class ModelTestCase(BaseTestCase):
     """Test case for the database models."""
@@ -97,26 +98,30 @@ class ModelTestCase(BaseTestCase):
         self.assertEqual(saved_data.date, date(2025, 3, 1))
     
     def test_data_source_model(self):
-        """Test DataType model for source functionality."""
-        # Create a test data type that represents a source
+        """Test that we can create and query DataType records."""
+        # Create a source info data type
         data_type = DataType(
             source='test_source',
             metric_name='source_info',
-            source_type='test_type',
+            metric_units=None,
+            source_type='api',
             last_import=datetime(2025, 3, 1, 12, 0, 0)
         )
         
+        # Add and commit to the database
         db.session.add(data_type)
         db.session.commit()
         
-        # Test the get_data_source method
+        # Get the source using the class method
         source = DataType.get_data_source('test_source')
+        
+        # Assert the source was found
         self.assertIsNotNone(source)
         self.assertEqual(source.source, 'test_source')
         self.assertEqual(source.metric_name, 'source_info')
-        self.assertEqual(source.source_type, 'test_type')
+        self.assertEqual(source.source_type, 'api')
         
-        # Test the update_last_import method
+        # Test the update method
         DataType.update_last_import('test_source')
         
         # Verify the update
@@ -124,15 +129,14 @@ class ModelTestCase(BaseTestCase):
         self.assertIsNotNone(updated_source)
         self.assertGreater(updated_source.last_import, datetime(2025, 3, 1, 12, 0, 0))
     
-    def test_user_defined_metric_model(self):
-        """Test UserDefinedMetric model creation and querying."""
-        # Create a test user-defined metric
-        metric = UserDefinedMetric(
-            name='test_metric',
-            unit='test_units',
-            description='This is a test metric',
-            data_type='numeric',
-            is_cumulative=False
+    def test_custom_metric_in_data_type(self):
+        """Test creating and querying custom metrics using DataType."""
+        # Create a test custom metric
+        metric = DataType(
+            source='custom',
+            metric_name='test_metric',
+            metric_units='test_units',
+            description='This is a test metric'
         )
         
         # Add and commit to the database
@@ -140,15 +144,13 @@ class ModelTestCase(BaseTestCase):
         db.session.commit()
         
         # Query the database to verify the record was saved
-        saved_metric = UserDefinedMetric.query.filter_by(name='test_metric').first()
+        saved_metric = DataType.query.filter_by(source='custom', metric_name='test_metric').first()
         
         # Assert that the record exists and has the correct attributes
         self.assertIsNotNone(saved_metric)
-        self.assertEqual(saved_metric.name, 'test_metric')
-        self.assertEqual(saved_metric.unit, 'test_units')
+        self.assertEqual(saved_metric.metric_name, 'test_metric')
+        self.assertEqual(saved_metric.metric_units, 'test_units')
         self.assertEqual(saved_metric.description, 'This is a test metric')
-        self.assertEqual(saved_metric.data_type, 'numeric')
-        self.assertEqual(saved_metric.is_cumulative, False)
     
     def test_health_data_unique_constraint(self):
         """Test that the unique constraint on HealthData works."""

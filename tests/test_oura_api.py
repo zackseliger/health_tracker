@@ -197,13 +197,13 @@ class OuraAPITestCase(BaseTestCase):
         ).all()
         
         # Verify we have a DataType for rem_sleep
-        self.assertEquals(len(rem_sleep_metrics), 1)
+        self.assertEqual(len(rem_sleep_metrics), 1)
         
         # Verify we have 2 data points for rem_sleep (one for each day)
         rem_sleep_data = HealthData.query.filter_by(
             data_type_id=rem_sleep_metrics[0].id
         ).all()
-        self.assertEquals(len(rem_sleep_data), 2)
+        self.assertEqual(len(rem_sleep_data), 2)
         
         # Verify the DataType objects exist
         self.assertIsNotNone(sleep_score_type)

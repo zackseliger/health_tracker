@@ -10,6 +10,7 @@ class DataType(db.Model):
     metric_name = db.Column(db.String(100), nullable=False)
     metric_units = db.Column(db.String(50))
     source_type = db.Column(db.String(50), nullable=True)  # 'api', 'csv', 'manual'
+    description = db.Column(db.Text)
     last_import = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -129,22 +130,6 @@ class HealthData(db.Model):
         )
         
         return health_data
-
-class UserDefinedMetric(db.Model):
-    """Model for user-defined custom metrics"""
-    __tablename__ = 'user_defined_metrics'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True)
-    unit = db.Column(db.String(50))
-    description = db.Column(db.Text)
-    data_type = db.Column(db.String(50), default='numeric')  # 'numeric', 'boolean', 'scale'
-    is_cumulative = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    def __repr__(self):
-        return f"<UserDefinedMetric {self.name} ({self.unit})>"
 
 class ImportRecord(db.Model):
     """Model to track import operations"""

@@ -6,7 +6,7 @@ import traceback
 from sqlalchemy import func
 
 from .. import db
-from ..models.base import HealthData, UserDefinedMetric, ImportRecord, DataType
+from ..models.base import HealthData, ImportRecord, DataType
 from ..utils.oura_importer import OuraImporter
 from ..utils.chronometer_importer import ChronometerImporter
 
@@ -21,8 +21,8 @@ def index():
                        .order_by(DataType.source) \
                        .all()
     
-    # Get all user-defined metrics
-    custom_metrics = UserDefinedMetric.query.order_by(UserDefinedMetric.name).all()
+    # Get all custom metrics
+    custom_metrics = DataType.query.filter_by(source='custom').order_by(DataType.metric_name).all()
     
     # Get some stats
     data_count = HealthData.query.count()
@@ -55,7 +55,7 @@ def index():
     today_date = datetime.now().strftime("%Y-%m-%d")
     
     # Get custom metrics for the form
-    custom_metrics = UserDefinedMetric.query.all()
+    custom_metrics = DataType.query.filter_by(source='custom').all()
     
     return render_template('data/index.html', 
                           data_sources=data_sources,
@@ -106,7 +106,7 @@ def import_data():
     today_date = datetime.now().strftime("%Y-%m-%d")
     
     # Get custom metrics for the form
-    custom_metrics = UserDefinedMetric.query.all()
+    custom_metrics = DataType.query.filter_by(source='custom').all()
     
     return render_template('data/import.html', 
                            oura_connected=oura_connected,
@@ -280,18 +280,6 @@ def _import_custom_data():
             flash('Invalid date or value format', 'error')
             return redirect(url_for('data.import_data'))
         
-        # Check if this metric exists as a user-defined metric
-        udm = UserDefinedMetric.query.filter_by(name=metric_name).first()
-        if not udm:
-            # Create a new user-defined metric
-            udm = UserDefinedMetric(
-                name=metric_name,
-                units=metric_units,
-                description=f"Custom metric added on {datetime.now().strftime('%Y-%m-%d')}",
-                frequency='custom'
-            )
-            db.session.add(udm)
-        
         # Get or create the DataType
         data_type = DataType.query.filter_by(
             source='custom',
@@ -302,7 +290,8 @@ def _import_custom_data():
             data_type = DataType(
                 source='custom',
                 metric_name=metric_name,
-                metric_units=metric_units
+                metric_units=metric_units,
+                description=f"Custom metric added on {datetime.now().strftime('%Y-%m-%d')}"
             )
             db.session.add(data_type)
             db.session.flush()  # Flush to get the ID
@@ -350,20 +339,20 @@ def custom_metrics():
         # Handle deletion
         if 'delete' in request.form:
             metric_id = request.form.get('metric_id')
-            metric = UserDefinedMetric.query.get(metric_id)
+            metric = DataType.query.filter_by(id=metric_id, source='custom').first()
             
             if metric:
                 db.session.delete(metric)
                 db.session.commit()
                 
-                flash(f'Deleted custom metric: {metric.name}', 'success')
+                flash(f'Deleted custom metric: {metric.metric_name}', 'success')
             else:
                 flash('Metric not found', 'error')
             
             return redirect(url_for('data.custom_metrics'))
     
     # Get all custom metrics
-    metrics = UserDefinedMetric.query.order_by(UserDefinedMetric.name).all()
+    metrics = DataType.query.filter_by(source='custom').order_by(DataType.metric_name).all()
     
     return render_template('data/custom_metrics.html', metrics=metrics)
 

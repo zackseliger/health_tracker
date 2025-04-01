@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from tests.test_base import BaseTestCase
 from app import db
-from app.models.base import HealthData, UserDefinedMetric, ImportRecord, DataType
+from app.models.base import HealthData, ImportRecord, DataType
 from sqlalchemy import or_, and_, func, desc
 
 class DatabaseAdvancedTestCase(BaseTestCase):
@@ -33,29 +33,19 @@ class DatabaseAdvancedTestCase(BaseTestCase):
                 last_import=datetime.now()
             ))
         
-        # Create user-defined metrics
+        # Create metrics
         metrics = [
-            ('sleep_duration', 'hours', 'Sleep duration', 'numeric', False),
-            ('steps', 'count', 'Steps taken', 'numeric', True),
-            ('calories', 'kcal', 'Calories consumed', 'numeric', True),
-            ('weight', 'kg', 'Body weight', 'numeric', False),
-            ('protein', 'g', 'Protein consumed', 'numeric', True)
+            ('sleep_duration', 'hours', 'Sleep duration'),
+            ('steps', 'count', 'Steps taken'),
+            ('calories', 'kcal', 'Calories consumed'),
+            ('weight', 'kg', 'Body weight'),
+            ('protein', 'g', 'Protein consumed')
         ]
-        
-        for name, unit, desc, data_type, is_cumulative in metrics:
-            metric = UserDefinedMetric(
-                name=name, 
-                unit=unit, 
-                description=desc, 
-                data_type=data_type,
-                is_cumulative=is_cumulative
-            )
-            db.session.add(metric)
         
         # Create DataTypes for different metrics
         data_types = {}
         for source in sources:
-            for metric_name, units, _, _, _ in metrics:
+            for metric_name, units, desc in metrics:
                 # Only create some combinations to simulate real-world data 
                 if (source == 'oura' and metric_name in ['sleep_duration', 'steps']) or \
                    (source == 'chronometer' and metric_name in ['calories', 'protein']) or \
@@ -64,7 +54,8 @@ class DatabaseAdvancedTestCase(BaseTestCase):
                     data_type = DataType(
                         source=source,
                         metric_name=metric_name,
-                        metric_units=units
+                        metric_units=units,
+                        description=desc
                     )
                     db.session.add(data_type)
                     data_types[(source, metric_name)] = data_type

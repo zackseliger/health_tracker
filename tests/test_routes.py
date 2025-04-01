@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from tests.test_base import BaseTestCase
 from app import db
-from app.models.base import UserDefinedMetric, HealthData, DataType
+from app.models.base import HealthData, DataType
 
 class RouteTestCase(BaseTestCase):
     """Test case for the application routes."""

@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from tests.test_base import BaseTestCase
 from app import db
-from app.models.base import HealthData, UserDefinedMetric, ImportRecord, DataType
+from app.models.base import HealthData, DataType, ImportRecord
 from sqlalchemy.exc import IntegrityError
 
 class DatabaseTestCase(BaseTestCase):
@@ -101,53 +101,6 @@ class DatabaseTestCase(BaseTestCase):
         self.assertIsNotNone(new_source)
         self.assertEqual(new_source.metric_name, 'source_info')
         self.assertEqual(new_source.source_type, 'unknown')
-    
-    def test_user_defined_metric_model_crud(self):
-        """Test CRUD operations for UserDefinedMetric model."""
-        # CREATE
-        metric = UserDefinedMetric(
-            name='test_metric',
-            unit='test_units',
-            description='Test description',
-            data_type='numeric',
-            is_cumulative=False
-        )
-        
-        db.session.add(metric)
-        db.session.commit()
-        
-        # READ
-        saved_metric = UserDefinedMetric.query.filter_by(name='test_metric').first()
-        
-        # Assert all fields match
-        self.assertIsNotNone(saved_metric)
-        self.assertEqual(saved_metric.name, 'test_metric')
-        self.assertEqual(saved_metric.unit, 'test_units')
-        self.assertEqual(saved_metric.description, 'Test description')
-        self.assertEqual(saved_metric.data_type, 'numeric')
-        self.assertEqual(saved_metric.is_cumulative, False)
-        
-        # UPDATE
-        saved_metric.unit = 'updated_units'
-        saved_metric.description = 'Updated description'
-        saved_metric.data_type = 'scale'
-        saved_metric.is_cumulative = True
-        db.session.commit()
-        
-        # Read again to verify update
-        updated_metric = UserDefinedMetric.query.get(saved_metric.id)
-        self.assertEqual(updated_metric.unit, 'updated_units')
-        self.assertEqual(updated_metric.description, 'Updated description')
-        self.assertEqual(updated_metric.data_type, 'scale')
-        self.assertEqual(updated_metric.is_cumulative, True)
-        
-        # DELETE
-        db.session.delete(updated_metric)
-        db.session.commit()
-        
-        # Verify deletion
-        deleted_metric = UserDefinedMetric.query.get(updated_metric.id)
-        self.assertIsNone(deleted_metric)
     
     def test_import_record_model_crud(self):
         """Test CRUD operations for ImportRecord model."""
@@ -257,22 +210,64 @@ class DatabaseTestCase(BaseTestCase):
         # Rollback the session to clean up
         db.session.rollback()
     
-    def test_user_defined_metric_unique_name_constraint(self):
-        """Test that the unique constraint on UserDefinedMetric name works."""
-        # Create a user-defined metric
-        metric1 = UserDefinedMetric(
-            name='test_metric',
-            unit='test_units'
+    def test_custom_metric_crud(self):
+        """Test CRUD operations for custom metrics in DataType model."""
+        # CREATE
+        metric = DataType(
+            source='custom',
+            metric_name='test_metric',
+            metric_units='test_units',
+            description='Test description'
+        )
+        
+        db.session.add(metric)
+        db.session.commit()
+        
+        # READ
+        saved_metric = DataType.query.filter_by(source='custom', metric_name='test_metric').first()
+        
+        # Assert all fields match
+        self.assertIsNotNone(saved_metric)
+        self.assertEqual(saved_metric.metric_name, 'test_metric')
+        self.assertEqual(saved_metric.metric_units, 'test_units')
+        self.assertEqual(saved_metric.description, 'Test description')
+
+        # UPDATE
+        saved_metric.metric_units = 'updated_units'
+        saved_metric.description = 'Updated description'
+        db.session.commit()
+        
+        # Read again to verify update
+        updated_metric = DataType.query.get(saved_metric.id)
+        self.assertEqual(updated_metric.metric_units, 'updated_units')
+        self.assertEqual(updated_metric.description, 'Updated description')
+        
+        # DELETE
+        db.session.delete(updated_metric)
+        db.session.commit()
+        
+        # Verify deletion
+        deleted_metric = DataType.query.get(updated_metric.id)
+        self.assertIsNone(deleted_metric)
+    
+    def test_custom_metric_unique_constraint(self):
+        """Test that the unique constraint on custom metrics works."""
+        # Create a custom metric
+        metric1 = DataType(
+            source='custom',
+            metric_name='test_metric',
+            metric_units='test_units'
         )
         
         # Add and commit to the database
         db.session.add(metric1)
         db.session.commit()
         
-        # Create another metric with the same name
-        metric2 = UserDefinedMetric(
-            name='test_metric',
-            unit='different_units'
+        # Create another metric with the same source and metric_name
+        metric2 = DataType(
+            source='custom',
+            metric_name='test_metric',
+            metric_units='different_units'
         )
         
         # This should raise an IntegrityError due to the unique constraint
