@@ -6,6 +6,15 @@
 <div class="container-fluid">
     <h1 class="my-4">Browse Health Data</h1>
 
+    <!-- Add derive data button -->
+    <div class="row mb-3">
+        <div class="col-md-12 d-flex justify-content-end">
+            <a href="{{ url_for('data.derive_data_form') }}" class="btn btn-success">
+                <i class="fas fa-plus-circle"></i> Create Derived Data Type
+            </a>
+        </div>
+    </div>
+    
     <div class="row mb-4">
         <div class="col-md-12">
             <div class="card">

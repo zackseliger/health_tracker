@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from werkzeug.utils import secure_filename
 import os
 from datetime import datetime, date, timedelta
+import pandas as pd
 import traceback
 from sqlalchemy import func
 
@@ -404,10 +405,12 @@ def browse():
     
     # Add calories filtering
     if max_calories is not None:
-        # First, get all dates where there's an "Energy (kcal)" entry below the threshold
+        # First, get all dates where there's an energy/calorie entry below the threshold
         energy_subquery = db.session.query(HealthData.date)\
             .join(DataType)\
-            .filter(DataType.metric_name == 'Energy')\
+            .filter(
+                (DataType.metric_name == 'Energy')
+            )\
             .filter(HealthData.metric_value <= max_calories)\
             .distinct()
         
@@ -762,4 +765,120 @@ def delete_data_type(type_id):
         current_app.logger.error(f"Error deleting data type: {e}")
         flash(f'Error deleting data type: {str(e)}', 'error')
     
-    return redirect(url_for('data.data_types')) 
+    return redirect(url_for('data.data_types'))
+
+
+@data_bp.route('/browse/derive', methods=['GET'])
+def derive_data_form():
+    """Show form for creating a derived DataType"""
+    # Get all data types for source selection
+    data_types = DataType.query.order_by(DataType.source, DataType.metric_name).all()
+    
+    # Get all available operations
+    from ..utils.derived_operations import OperationRegistry
+    operations = OperationRegistry.get_all_operations()
+    
+    return render_template(
+        'data/derive_data.html',
+        data_types=data_types,
+        operations=operations
+    )
+
+
+@data_bp.route('/browse/derive', methods=['POST'])
+def derive_data_process():
+    """Process form and create derived DataType"""
+    from ..utils.derived_operations import OperationRegistry, get_data_for_derivation
+    
+    try:
+        # Get form data
+        source_type_id = request.form.get('source_type_id', type=int)
+        operation_slug = request.form.get('operation')
+        new_name = request.form.get('new_name')
+        new_units = request.form.get('new_units')
+        
+        # Validate basic inputs
+        if not source_type_id or not operation_slug or not new_name:
+            flash('Please fill out all required fields', 'error')
+            return redirect(url_for('data.derive_data_form'))
+        
+        # Get source DataType
+        source_type = DataType.query.get_or_404(source_type_id)
+        
+        # Get operation
+        operation = OperationRegistry.get_operation(operation_slug)
+        if not operation:
+            flash(f'Invalid operation: {operation_slug}', 'error')
+            return redirect(url_for('data.derive_data_form'))
+        
+        # Collect operation parameters
+        params = {}
+        for param_name, param_spec in operation.get_param_schema().items():
+            if param_spec['type'] == 'integer':
+                params[param_name] = request.form.get(param_name, type=int)
+            elif param_spec['type'] == 'float':
+                params[param_name] = request.form.get(param_name, type=float)
+            elif param_spec['type'] == 'data_type':
+                params[param_name] = request.form.get(param_name, type=int)
+            else:
+                params[param_name] = request.form.get(param_name)
+        
+        # Validate parameters
+        valid, errors = operation.validate_params(params)
+        if not valid:
+            for field, error in errors.items():
+                flash(f"Parameter error - {field}: {error}", 'error')
+            return redirect(url_for('data.derive_data_form'))
+        
+        # Fetch source data
+        source_data = get_data_for_derivation(source_type.id)
+        
+        # Exit early if no source data
+        if len(source_data) == 0:
+            flash(f'No data available for the selected source data type', 'error')
+            return redirect(url_for('data.derive_data_form'))
+        
+        # Apply operation
+        transformed_data = operation.apply(source_data, params)
+        
+        # Create new DataType
+        new_data_type = DataType(
+            source='derived',
+            metric_name=new_name,
+            metric_units=new_units or source_type.metric_units,
+            description=f"Derived from {source_type.source}:{source_type.metric_name} using {operation.name}. Parameters: {params}",
+            source_type='derived'
+        )
+        db.session.add(new_data_type)
+        db.session.flush()  # To get the new ID
+        
+        # Create HealthData records
+        created_count = 0
+        for _, row in transformed_data.iterrows():
+            # Skip NaN or None values
+            if pd.isna(row['value']) or row['value'] is None:
+                continue
+                
+            # Create the health data record
+            new_data = HealthData(
+                date=row['date'],
+                data_type_id=new_data_type.id,
+                metric_value=float(row['value']),
+                notes=f"Derived from {source_type.source}:{source_type.metric_name}"
+            )
+            db.session.add(new_data)
+            created_count += 1
+        
+        # Update last import for derived source
+        DataType.update_last_import('derived')
+        
+        db.session.commit()
+        flash(f'Successfully created new derived DataType "{new_name}" with {created_count} data points', 'success')
+        
+        return redirect(url_for('data.browse'))
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error creating derived data", exc_info=True)
+        flash(f'Error creating derived data. Please try again', 'error')
+        return redirect(url_for('data.derive_data_form'))

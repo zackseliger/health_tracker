@@ -1,0 +1,329 @@
+{% extends 'base.html' %}
+
+{% block title %}Create Derived Data Type - Health Data Tracker{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="my-4">Create Derived Data Type</h1>
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Derive New Data Type</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('data.derive_data_process') }}" id="deriveForm">
+                        <div class="mb-3">
+                            <label for="source_type_id" class="form-label">Source Data Type</label>
+                            <select class="form-select" id="source_type_id" name="source_type_id" required>
+                                <option value="">Select a data type</option>
+                                {% for data_type in data_types %}
+                                    <option value="{{ data_type.id }}">
+                                        {{ data_type.source }}:{{ data_type.metric_name }} 
+                                        ({{ data_type.metric_units or 'no units' }})
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Select the source data type to derive from</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="operation" class="form-label">Operation</label>
+                            <select class="form-select" id="operation" name="operation" required>
+                                <option value="">Select an operation</option>
+                                {% for op in operations %}
+                                    <option value="{{ op.slug }}">{{ op.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Select the operation to apply</div>
+                        </div>
+                        
+                        <div id="operationParams" class="mb-3">
+                            <!-- Operation-specific parameters will be loaded here -->
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="new_name" class="form-label">New Metric Name</label>
+                            <input type="text" class="form-control" id="new_name" name="new_name" required>
+                            <div class="form-text">Enter a name for the new derived metric</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="new_units" class="form-label">Units (optional)</label>
+                            <input type="text" class="form-control" id="new_units" name="new_units">
+                            <div class="form-text">Leave blank to use the same units as the source</div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('data.browse') }}" class="btn btn-secondary">
+                                Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                Create Derived Data Type
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">Information</h5>
+                </div>
+                <div class="card-body">
+                    <p>This feature allows you to create new data types derived from existing ones.</p>
+                    
+                    <h6>Available Operations:</h6>
+                    <ul>
+                        <li><strong>Time Shift</strong>: Shift data points forward or backward by a number of days.</li>
+                        <li><strong>Multiply</strong>: Multiply values by a constant or another data type.</li>
+                        <li><strong>Divide</strong>: Divide values by a constant or another data type.</li>
+                        <li><strong>Moving Average</strong>: Calculate moving averages over a window of days.</li>
+                    </ul>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 
+                        The derived data is created as a one-time operation and won't be 
+                        automatically updated when the source data changes.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Operation parameter form generator
+    const operationParams = {
+        time_shift: {
+            fields: [
+                {
+                    name: 'days',
+                    label: 'Days to Shift',
+                    type: 'number',
+                    required: true,
+                    help: 'Positive values shift forward, negative values shift backward'
+                }
+            ]
+        },
+        multiply: {
+            fields: [
+                {
+                    name: 'value_type',
+                    label: 'Multiply By',
+                    type: 'select',
+                    options: [
+                        { value: 'scalar', label: 'Constant Value' },
+                        { value: 'data_type', label: 'Another Data Type' }
+                    ],
+                    required: true
+                },
+                {
+                    name: 'scalar',
+                    label: 'Constant Value',
+                    type: 'number',
+                    step: 'any',
+                    required: true,
+                    conditional: {
+                        field: 'value_type',
+                        value: 'scalar'
+                    }
+                },
+                {
+                    name: 'data_type_id',
+                    label: 'Data Type',
+                    type: 'data_type_select',
+                    required: true,
+                    conditional: {
+                        field: 'value_type',
+                        value: 'data_type'
+                    }
+                }
+            ]
+        },
+        divide: {
+            fields: [
+                {
+                    name: 'value_type',
+                    label: 'Divide By',
+                    type: 'select',
+                    options: [
+                        { value: 'scalar', label: 'Constant Value' },
+                        { value: 'data_type', label: 'Another Data Type' }
+                    ],
+                    required: true
+                },
+                {
+                    name: 'scalar',
+                    label: 'Constant Value',
+                    type: 'number',
+                    step: 'any',
+                    required: true,
+                    conditional: {
+                        field: 'value_type',
+                        value: 'scalar'
+                    }
+                },
+                {
+                    name: 'data_type_id',
+                    label: 'Data Type',
+                    type: 'data_type_select',
+                    required: true,
+                    conditional: {
+                        field: 'value_type',
+                        value: 'data_type'
+                    }
+                }
+            ]
+        },
+        moving_average: {
+            fields: [
+                {
+                    name: 'window',
+                    label: 'Window Size (days)',
+                    type: 'number',
+                    required: true,
+                    help: 'Number of days to include in the moving average'
+                }
+            ]
+        }
+    };
+
+    // When the operation selection changes, update the parameter form
+    document.getElementById('operation').addEventListener('change', function() {
+        const operationSlug = this.value;
+        const paramsContainer = document.getElementById('operationParams');
+        
+        // Clear existing parameters
+        paramsContainer.innerHTML = '';
+        
+        if (!operationSlug || !operationParams[operationSlug]) {
+            return;
+        }
+        
+        // Add title
+        const title = document.createElement('h6');
+        title.textContent = 'Operation Parameters';
+        paramsContainer.appendChild(title);
+        
+        // Generate form fields based on the operation schema
+        const fields = operationParams[operationSlug].fields;
+        fields.forEach(field => {
+            const fieldContainer = document.createElement('div');
+            fieldContainer.className = 'mb-3';
+            
+            if (field.conditional) {
+                fieldContainer.dataset.conditionalField = field.conditional.field;
+                fieldContainer.dataset.conditionalValue = field.conditional.value;
+                fieldContainer.style.display = 'none';
+            }
+            
+            // Create label
+            const label = document.createElement('label');
+            label.htmlFor = field.name;
+            label.className = 'form-label';
+            label.textContent = field.label;
+            if (field.required) {
+                label.innerHTML += ' <span class="text-danger">*</span>';
+            }
+            fieldContainer.appendChild(label);
+            
+            // Create input field based on type
+            if (field.type === 'select' || field.type === 'data_type_select') {
+                const select = document.createElement('select');
+                select.className = 'form-select';
+                select.id = field.name;
+                select.name = field.name;
+                if (field.required) select.required = true;
+                
+                // Add initial empty option
+                const emptyOption = document.createElement('option');
+                emptyOption.value = '';
+                emptyOption.textContent = 'Select...';
+                select.appendChild(emptyOption);
+                
+                if (field.type === 'select') {
+                    // Add options from the field definition
+                    field.options.forEach(option => {
+                        const optionElement = document.createElement('option');
+                        optionElement.value = option.value;
+                        optionElement.textContent = option.label;
+                        select.appendChild(optionElement);
+                    });
+                } else if (field.type === 'data_type_select') {
+                    // Clone the options from the source data type selector
+                    const sourceSelect = document.getElementById('source_type_id');
+                    Array.from(sourceSelect.options).forEach(opt => {
+                        if (opt.value) {  // Skip the empty option
+                            const optionElement = document.createElement('option');
+                            optionElement.value = opt.value;
+                            optionElement.textContent = opt.textContent;
+                            select.appendChild(optionElement);
+                        }
+                    });
+                }
+                
+                fieldContainer.appendChild(select);
+                
+                // Add event listener for conditional fields
+                if (field.name === 'value_type') {
+                    select.addEventListener('change', updateConditionalFields);
+                }
+            } else if (field.type === 'number') {
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.className = 'form-control';
+                input.id = field.name;
+                input.name = field.name;
+                if (field.step) input.step = field.step;
+                if (field.required) input.required = true;
+                fieldContainer.appendChild(input);
+            }
+            
+            // Add help text if provided
+            if (field.help) {
+                const helpText = document.createElement('div');
+                helpText.className = 'form-text';
+                helpText.textContent = field.help;
+                fieldContainer.appendChild(helpText);
+            }
+            
+            paramsContainer.appendChild(fieldContainer);
+        });
+        
+        // Initialize conditional fields
+        updateConditionalFields();
+    });
+    
+    function updateConditionalFields() {
+        const valueTypeField = document.querySelector('select[name="value_type"]');
+        if (!valueTypeField) return;
+        
+        const valueType = valueTypeField.value;
+        const conditionalFields = document.querySelectorAll('[data-conditional-field]');
+        
+        conditionalFields.forEach(field => {
+            if (field.dataset.conditionalField === 'value_type') {
+                if (field.dataset.conditionalValue === valueType) {
+                    field.style.display = 'block';
+                    const inputs = field.querySelectorAll('input, select');
+                    inputs.forEach(input => {
+                        input.disabled = false;
+                    });
+                } else {
+                    field.style.display = 'none';
+                    const inputs = field.querySelectorAll('input, select');
+                    inputs.forEach(input => {
+                        input.disabled = true;
+                    });
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

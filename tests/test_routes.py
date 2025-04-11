@@ -373,7 +373,7 @@ class RouteTestCase(BaseTestCase):
         # Create test data types
         dt_energy = DataType(
             source='chronometer',
-            metric_name='Energy (kcal)',
+            metric_name='Energy',
             metric_units='kcal',
             source_type='csv'
         )
@@ -445,7 +445,7 @@ class RouteTestCase(BaseTestCase):
         # Create test data types
         dt_energy = DataType(
             source='chronometer',
-            metric_name='Energy (kcal)',
+            metric_name='Energy',
             metric_units='kcal',
             source_type='csv'
         )
