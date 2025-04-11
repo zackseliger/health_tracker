@@ -138,15 +138,23 @@ class HealthAnalyzer:
                            and 'calories' not in col.lower()
                            and 'energy' not in col.lower()]
             
-            # For each nutrient, create a density metric (per 100 calories)
+            # Dictionary to store the new density columns before adding them
+            new_density_cols = {}
+            
+            # For each nutrient, calculate its density metric (per 100 calories)
             for nutrient_col in nutrient_cols:
                 nutrient_name = nutrient_col.split(':')[1]  # Extract the metric name
                 density_col = f"{source}:density_{nutrient_name}"
                 
                 # Calculate: nutrient value per 100 calories
                 # Use .div for division to handle NaN values better than the / operator
-                df[density_col] = df[nutrient_col].div(df[energy_col]).multiply(100)
+                calculated_density = df[nutrient_col].div(df[energy_col]).multiply(100)
+                new_density_cols[density_col] = calculated_density
         
+            # If any density columns were calculated, add them all at once
+            if new_density_cols:
+                density_df = pd.DataFrame(new_density_cols, index=df.index)
+                df = pd.concat([df, density_df], axis=1)
         return df
     
     def calculate_correlation(self, metric1_name, metric1_source, metric2_name, metric2_source, 

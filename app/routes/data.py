@@ -236,20 +236,15 @@ def _import_chronometer_csv():
             file.save(file_path)
             
             # Import the data
+            store_categories = request.form.get('process_categories') == 'yes'
             importer = ChronometerImporter()
-            data = importer.import_from_csv(file_path)
-            
-            # Process food categories if requested
-            if request.form.get('process_categories') == 'yes':
-                import pandas as pd
-                df = pd.read_csv(file_path)
-                importer.process_food_categories(df)
+            nutrition_data, category_data = importer.import_from_csv(file_path, store_categories)
             
             # Clean up the temp file
             os.remove(file_path)
             
-            imported_count = len(data)
-            flash(f'Successfully imported {imported_count} Chronometer nutrition data points', 'success')
+            total_data_points = len(nutrition_data) if store_categories else len(nutrition_data) + len(category_data)
+            flash(f'Successfully imported {total_data_points} Chronometer data points from Chronometer CSV with store_categories == {store_categories}.', 'success')
         else:
             flash('Invalid file format. Please upload a CSV file.', 'error')
             return redirect(url_for('data.import_data'))
@@ -412,7 +407,7 @@ def browse():
         # First, get all dates where there's an "Energy (kcal)" entry below the threshold
         energy_subquery = db.session.query(HealthData.date)\
             .join(DataType)\
-            .filter(DataType.metric_name == 'Energy (kcal)')\
+            .filter(DataType.metric_name == 'Energy')\
             .filter(HealthData.metric_value <= max_calories)\
             .distinct()
         
@@ -438,7 +433,7 @@ def browse():
     energy_stats = db.session.query(
         func.min(HealthData.metric_value).label('min_value'),
         func.max(HealthData.metric_value).label('max_value')
-    ).join(DataType).filter(DataType.metric_name == 'Energy (kcal)').first()
+    ).join(DataType).filter(DataType.metric_name == 'Energy').first()
     
     min_calories = int(energy_stats.min_value) if energy_stats and energy_stats.min_value is not None else 0
     max_calories_bound = int(energy_stats.max_value) if energy_stats and energy_stats.max_value is not None else 4000

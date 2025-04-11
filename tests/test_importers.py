@@ -233,8 +233,8 @@ class ImporterTestCase(BaseTestCase):
         
         # Check that the importer has the expected attributes
         self.assertIsNotNone(importer.nutrition_metrics)
-        self.assertIn('Energy (kcal)', importer.nutrition_metrics)
-        self.assertIn('Protein (g)', importer.nutrition_metrics)
+        self.assertIn('Energy', importer.nutrition_metrics) # Check for canonical name
+        self.assertIn('Protein', importer.nutrition_metrics) # Check for canonical name
     
     def test_cronometer_import_nutrition_data(self):
         """Test importing nutrition data from a Cronometer CSV file."""

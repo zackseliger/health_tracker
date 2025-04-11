@@ -42,8 +42,8 @@ class ChronometerImportTestCase(BaseTestCase):
         
         # Check that the nutrition metrics are defined
         self.assertTrue(len(importer.nutrition_metrics) > 0)
-        self.assertIn('Energy (kcal)', importer.nutrition_metrics)
-        self.assertIn('Protein (g)', importer.nutrition_metrics)
+        self.assertIn('Energy', importer.nutrition_metrics) # Check for canonical name
+        self.assertIn('Protein', importer.nutrition_metrics) # Check for canonical name
     
     def test_process_csv_data(self):
         """Test processing raw CSV data"""
@@ -53,7 +53,8 @@ class ChronometerImportTestCase(BaseTestCase):
         df = pd.read_csv(StringIO(self.csv_data))
         
         # Process the data
-        processed_data = importer._process_csv_data(df)
+        # Pass a dummy file path as it's now required by the method
+        processed_data = importer._process_nutrition_data(df, 'dummy_test_path.csv')
         
         # Check that we have data for each date and metric
         self.assertGreater(len(processed_data), 0)
@@ -64,7 +65,7 @@ class ChronometerImportTestCase(BaseTestCase):
         self.assertIn(date(2023, 1, 2), dates)
         
         # Check that we have energy data
-        energy_data = [item for item in processed_data if item['metric_name'] == 'Energy (kcal)']
+        energy_data = [item for item in processed_data if item['metric_name'] == 'Energy'] # Use canonical name
         self.assertEqual(len(energy_data), 2)  # One for each date
         
         # Check the energy values
@@ -91,22 +92,23 @@ class ChronometerImportTestCase(BaseTestCase):
         try:
             # Create the importer and import data
             importer = ChronometerImporter()
-            result = importer.import_from_csv(temp_file_path)
-            
+            nutrition_data, category_data = importer.import_from_csv(temp_file_path)
+
             # Verify that data was imported correctly
-            self.assertIsNotNone(result)
-            self.assertGreater(len(result), 0)
+            self.assertIsNotNone(nutrition_data)
+            # self.assertIsNotNone(category_data) # Category data might be empty depending on CSV
+            self.assertGreater(len(nutrition_data), 0) # Check nutrition data length
             
             # Check that data was added to the database
             # Get the DataType objects for the metrics
             energy_type = DataType.query.filter_by(
                 source='chronometer',
-                metric_name='Energy (kcal)'
+                metric_name='Energy' # Use canonical name
             ).first()
             
             protein_type = DataType.query.filter_by(
                 source='chronometer',
-                metric_name='Protein (g)'
+                metric_name='Protein' # Use canonical name
             ).first()
             
             # Verify the DataType objects exist
@@ -131,10 +133,9 @@ class ChronometerImportTestCase(BaseTestCase):
             self.assertIsNotNone(protein_data)
             self.assertEqual(protein_data.metric_value, 100)
             
-            # Check that a data source was added
-            source = DataType.query.filter_by(source='chronometer', metric_name='source_info').first()
-            self.assertIsNotNone(source)
-            self.assertEqual(source.source_type, 'csv')
+            # NOTE: The 'source_info' DataType check is removed as the refactored
+            # importer doesn't create this specific entry anymore.
+            # Timestamps are updated via DataType.update_last_import directly.
         
         finally:
             # Clean up the temporary file
@@ -148,7 +149,8 @@ class ChronometerImportTestCase(BaseTestCase):
         df = pd.read_csv(StringIO(self.csv_data))
         
         # Process the food categories
-        processed_data = importer.process_food_categories(df)
+        # Pass a dummy file path as it's now required by the method
+        processed_data = importer._process_food_categories(df, 'dummy_test_path.csv')
         
         # Check that we have data for each category
         self.assertGreater(len(processed_data), 0)
@@ -203,12 +205,12 @@ class ChronometerImportTestCase(BaseTestCase):
                 # Get the DataType objects for the metrics
                 energy_type = DataType.query.filter_by(
                     source='chronometer',
-                    metric_name='Energy (kcal)'
+                    metric_name='Energy' # Use canonical name
                 ).first()
                 
                 protein_type = DataType.query.filter_by(
                     source='chronometer',
-                    metric_name='Protein (g)'
+                    metric_name='Protein' # Use canonical name
                 ).first()
                 
                 # Verify the DataType objects exist
@@ -234,9 +236,8 @@ class ChronometerImportTestCase(BaseTestCase):
                 self.assertEqual(protein_data.metric_value, 100)
                 
                 # Check that a data source was added
-                source = DataType.query.filter_by(source='chronometer', metric_name='source_info').first()
-                self.assertIsNotNone(source)
-                self.assertEqual(source.source_type, 'csv')
+                # NOTE: The 'source_info' DataType check is removed as the refactored
+                # importer doesn't create this specific entry anymore.
         
         finally:
             # Clean up the temporary file

@@ -256,7 +256,7 @@ class RouteTestCase(BaseTestCase):
         # Check for energy data
         energy_type = DataType.query.filter_by(
             source='chronometer',
-            metric_name='Energy (kcal)'
+            metric_name='Energy' # Use canonical name
         ).first()
         self.assertIsNotNone(energy_type)
         
@@ -270,7 +270,7 @@ class RouteTestCase(BaseTestCase):
         # Check for protein data
         protein_type = DataType.query.filter_by(
             source='chronometer',
-            metric_name='Protein (g)'
+            metric_name='Protein' # Use canonical name
         ).first()
         self.assertIsNotNone(protein_type)
         
