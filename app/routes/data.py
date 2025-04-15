@@ -7,7 +7,7 @@ import traceback
 from sqlalchemy import func
 
 from .. import db
-from ..models.base import HealthData, ImportRecord, DataType
+from ..models.base import HealthData, DataType
 from ..utils.oura_importer import OuraImporter
 from ..utils.chronometer_importer import ChronometerImporter
 
@@ -38,9 +38,6 @@ def index():
         DataType.source.in_(['oura_sleep', 'oura_activity', 'oura_api', 'oura'])
     ).scalar()
     
-    # Get list of recent imports
-    recent_imports = ImportRecord.query.order_by(ImportRecord.date_imported.desc()).limit(10).all()
-    
     # Check if Oura is connected through the session
     oura_connected = session.get('oura_connected', False)
     
@@ -67,8 +64,7 @@ def index():
                           earliest_date=earliest_date,
                           oura_connected=oura_connected,
                           oura_last_import_date=oura_last_import_date,
-                          today_date=today_date,
-                          recent_imports=recent_imports)
+                          today_date=today_date)
 
 @data_bp.route('/import', methods=['GET', 'POST'])
 def import_data():
@@ -92,9 +88,6 @@ def import_data():
         DataType.source.in_(['oura_sleep', 'oura_activity', 'oura_api'])
     ).order_by(DataType.last_import.desc()).first()
     
-    # Get list of recent imports
-    recent_imports = ImportRecord.query.order_by(ImportRecord.date_imported.desc()).limit(10).all()
-    
     # Check if Oura is connected through the session
     oura_connected = session.get('oura_connected', False)
     
@@ -113,8 +106,7 @@ def import_data():
                            oura_connected=oura_connected,
                            oura_last_import_date=oura_last_import_date,
                            today_date=today_date,
-                           custom_metrics=custom_metrics,
-                           recent_imports=recent_imports)
+                           custom_metrics=custom_metrics)
 
 def _import_oura_api():
     """Import data from Oura API"""
@@ -164,18 +156,6 @@ def _import_oura_api():
             current_app.logger.error(f"Error importing tag data: {str(e)}")
             flash(f'Note: Tag data import failed, but sleep and activity data were imported: {str(e)}', 'warning')
             tags_data = []
-        
-        # Create import record
-        import_record = ImportRecord(
-            source='oura',
-            date_imported=datetime.now(),
-            date_range_start=datetime.strptime(start_date, '%Y-%m-%d').date(),
-            date_range_end=datetime.strptime(end_date, '%Y-%m-%d').date(),
-            record_count=len(sleep_data) + len(activity_data) + len(tags_data),
-            status='success'
-        )
-        db.session.add(import_record)
-        db.session.commit()
         
     except Exception as e:
         current_app.logger.error(f"Error importing Oura API data: {e}")
@@ -583,18 +563,6 @@ def import_oura():
                 current_app.logger.error(f"Error importing stress data: {str(e)}")
                 flash(f'Error importing stress data: {str(e)}', 'error')
         
-        # Create import record
-        import_record = ImportRecord(
-            source='oura',
-            date_imported=datetime.now(),
-            date_range_start=datetime.strptime(start_date, '%Y-%m-%d').date(),
-            date_range_end=datetime.strptime(end_date, '%Y-%m-%d').date(),
-            record_count=len(imported_data),
-            status='success'
-        )
-        db.session.add(import_record)
-        db.session.commit()
-        
         # Debug database counts
         if current_app.config.get('DEBUG', False):
             # Count sleep records
@@ -634,19 +602,6 @@ def import_oura():
     except Exception as e:
         current_app.logger.error(f"Error importing Oura API data: {e}")
         flash(f'Error importing data: {str(e)}', 'error')
-        
-        # Create failed import record
-        import_record = ImportRecord(
-            source='oura',
-            date_imported=datetime.now(),
-            date_range_start=datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None,
-            date_range_end=datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else None,
-            record_count=0,
-            status='failed',
-            error_message=str(e)
-        )
-        db.session.add(import_record)
-        db.session.commit()
     
     return redirect(url_for('data.import_data'))
 

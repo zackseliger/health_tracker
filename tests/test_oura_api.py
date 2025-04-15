@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from tests.test_base import BaseTestCase
-from app.models.base import HealthData, ImportRecord, DataType
+from app.models.base import HealthData, DataType
 from app.utils.oura_importer import OuraImporter
 from app import db
 
@@ -371,15 +371,7 @@ class OuraAPITestCase(BaseTestCase):
             # Check that the import was successful
             self.assertEqual(response.status_code, 200)
             
-            # Verify import record was created
-            import_record = ImportRecord.query.filter_by(source='oura').first()
-            self.assertIsNotNone(import_record)
-            self.assertEqual(import_record.status, 'success')
-            self.assertEqual(import_record.date_range_start, date(2023, 1, 1))
-            self.assertEqual(import_record.date_range_end, date(2023, 1, 7))
-            
             # Clear records for next test
-            db.session.query(ImportRecord).delete()
             db.session.query(HealthData).delete()
             db.session.query(DataType).delete()
             db.session.commit()

@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from tests.test_base import BaseTestCase
 from app import db
-from app.models.base import HealthData, ImportRecord, DataType
+from app.models.base import HealthData, DataType
 from sqlalchemy import or_, and_, func, desc
 
 class DatabaseAdvancedTestCase(BaseTestCase):
@@ -121,25 +121,7 @@ class DatabaseAdvancedTestCase(BaseTestCase):
                     metric_value=80 + (i % 5 - 2) * 10  # Range from 60 to 100g protein
                 )
                 db.session.add(protein)
-        
-        # Add some import records
-        for source in sources:
-            for i in range(3):
-                days_ago = i * 5
-                import_date = datetime.now() - timedelta(days=days_ago)
-                start_date = today - timedelta(days=days_ago + 10)
-                end_date = today - timedelta(days=days_ago)
-                
-                import_record = ImportRecord(
-                    source=f"{source}_import_{i}",
-                    date_imported=import_date,
-                    date_range_start=start_date,
-                    date_range_end=end_date,
-                    record_count=10 * (i + 1),
-                    status='success' if i < 2 else 'partial'
-                )
-                db.session.add(import_record)
-        
+
         # Commit all data
         db.session.commit()
     

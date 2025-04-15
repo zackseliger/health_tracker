@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from tests.test_base import BaseTestCase
 from app import db
-from app.models.base import HealthData, ImportRecord, DataType
+from app.models.base import HealthData, DataType
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import text
 
@@ -48,17 +48,6 @@ class DatabaseTransactionTestCase(BaseTestCase):
                 )
                 db.session.add(health_data)
             
-            # Create an import record
-            import_record = ImportRecord(
-                source='transaction_import',
-                date_imported=datetime.utcnow(),
-                date_range_start=date(2025, 3, 1),
-                date_range_end=date(2025, 3, 3),
-                record_count=3,
-                status='success'
-            )
-            db.session.add(import_record)
-            
             # Commit the transaction
             db.session.commit()
             
@@ -80,9 +69,6 @@ class DatabaseTransactionTestCase(BaseTestCase):
                     DataType.metric_name == f'transaction_metric_{i}'
                 ).first()
                 self.assertIsNotNone(health_data)
-            
-            import_rec = ImportRecord.query.filter_by(source='transaction_import').first()
-            self.assertIsNotNone(import_rec)
         
         except Exception as e:
             # Rollback in case of error

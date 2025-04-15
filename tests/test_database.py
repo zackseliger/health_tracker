@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from tests.test_base import BaseTestCase
 from app import db
-from app.models.base import HealthData, DataType, ImportRecord
+from app.models.base import HealthData, DataType
 from sqlalchemy.exc import IntegrityError
 
 class DatabaseTestCase(BaseTestCase):
@@ -101,49 +101,6 @@ class DatabaseTestCase(BaseTestCase):
         self.assertIsNotNone(new_source)
         self.assertEqual(new_source.metric_name, 'source_info')
         self.assertEqual(new_source.source_type, 'unknown')
-    
-    def test_import_record_model_crud(self):
-        """Test CRUD operations for ImportRecord model."""
-        # CREATE
-        import_record = ImportRecord(
-            source='test_source',
-            date_imported=datetime(2025, 3, 1, 12, 0, 0),
-            date_range_start=date(2025, 2, 1),
-            date_range_end=date(2025, 2, 28),
-            record_count=100,
-            status='success'
-        )
-        
-        db.session.add(import_record)
-        db.session.commit()
-        
-        # READ
-        saved_record = ImportRecord.query.filter_by(source='test_source').first()
-        
-        # Assert all fields match
-        self.assertIsNotNone(saved_record)
-        self.assertEqual(saved_record.source, 'test_source')
-        self.assertEqual(saved_record.date_imported, datetime(2025, 3, 1, 12, 0, 0))
-        self.assertEqual(saved_record.date_range_start, date(2025, 2, 1))
-        self.assertEqual(saved_record.date_range_end, date(2025, 2, 28))
-        self.assertEqual(saved_record.record_count, 100)
-        self.assertEqual(saved_record.status, 'success')
-        
-        # UPDATE
-        saved_record.record_count = 200
-        db.session.commit()
-        
-        # Verify the update
-        updated_record = ImportRecord.query.filter_by(source='test_source').first()
-        self.assertEqual(updated_record.record_count, 200)
-        
-        # DELETE
-        db.session.delete(saved_record)
-        db.session.commit()
-        
-        # Verify deletion
-        deleted_record = ImportRecord.query.filter_by(source='test_source').first()
-        self.assertIsNone(deleted_record)
     
     def test_health_data_unique_constraint(self):
         """Test that the unique constraint on HealthData works."""

@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from tests.test_base import BaseTestCase
-from app.models.base import HealthData, ImportRecord, DataType
+from app.models.base import HealthData, DataType
 from app.utils.oura_importer import OuraImporter
 from app.utils.analyzer import HealthAnalyzer
 from app import db  # Add the db import

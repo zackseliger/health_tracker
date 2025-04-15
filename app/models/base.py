@@ -130,20 +130,3 @@ class HealthData(db.Model):
         )
         
         return health_data
-
-class ImportRecord(db.Model):
-    """Model to track import operations"""
-    __tablename__ = 'import_records'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    source = db.Column(db.String(100), nullable=False)  # e.g., 'oura_sleep', 'chronometer_csv'
-    date_imported = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    date_range_start = db.Column(db.Date)
-    date_range_end = db.Column(db.Date)
-    record_count = db.Column(db.Integer, default=0)
-    status = db.Column(db.String(50), nullable=False)  # 'success', 'failed', 'partial'
-    error_message = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    def __repr__(self):
-        return f"<ImportRecord {self.source} - {self.date_range_start} to {self.date_range_end} ({self.record_count} records)>" 

@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from sqlalchemy.exc import IntegrityError
 from tests.test_base import BaseTestCase
 from app import db
-from app.models.base import HealthData, DataType, ImportRecord
+from app.models.base import HealthData, DataType
 
 class ModelTestCase(BaseTestCase):
     """Test case for the database models."""
