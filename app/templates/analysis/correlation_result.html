@@ -308,18 +308,14 @@ $(document).ready(function() {
     const data2 = validPairs.map(point => point.metric2);
     
     // Calculate regression for scatter plot
+    let regData = null;
     if (validPairs.length > 1) {
-        // Find min and max for x-axis
-        const minX = Math.min(...data1);
-        const maxX = Math.max(...data1);
-        
-        // Simple linear regression function
-        const regData = calculateRegression(data1, data2);
+        regData = calculateRegression(data1, data2);
     }
     
     // Create scatter plot
     const scatterCtx = document.getElementById('correlationScatter').getContext('2d');
-    new Chart(scatterCtx, {
+    const scatterChart = new Chart(scatterCtx, {
         type: 'scatter',
         data: {
             datasets: [{
@@ -333,6 +329,17 @@ $(document).ready(function() {
                 borderWidth: 1,
                 pointRadius: 6,
                 pointHoverRadius: 8
+            },
+            {
+                label: 'Trendline',
+                data: [], // This will be populated if regression data exists
+                type: 'line',
+                borderColor: 'rgb(255, 99, 132)',
+                backgroundColor: 'rgba(255, 99, 132, 0)', // Transparent background
+                fill: false,
+                pointRadius: 0, // Hide points on the line
+                borderWidth: 2,
+                hidden: false // Default to visible
             }]
         },
         options: {
@@ -342,8 +349,11 @@ $(document).ready(function() {
                 tooltip: {
                     callbacks: {
                         label: function(context) {
-                            const point = validPairs[context.dataIndex];
-                            return `Date: ${point.date}, ${metric1Name}: ${point.metric1}, ${metric2Name}: ${point.metric2}`;
+                            if (context.datasetIndex === 0) { // Only show tooltip for data points
+                                const point = validPairs[context.dataIndex];
+                                return `Date: ${point.date}, ${metric1Name}: ${point.metric1}, ${metric2Name}: ${point.metric2}`;
+                            }
+                            return null; // Hide tooltip for trendline
                         }
                     }
                 },
@@ -371,6 +381,27 @@ $(document).ready(function() {
             }
         }
     });
+
+    // Add trendline data if regression was calculated
+    if (regData) {
+        const minX = Math.min(...data1);
+        const maxX = Math.max(...data1);
+        
+        // Generate points for the trendline across the range of x values
+        const trendlineData = [{
+            x: minX,
+            y: regData.fn(minX)
+        }, {
+            x: maxX,
+            y: regData.fn(maxX)
+        }];
+        
+        scatterChart.data.datasets[1].data = trendlineData;
+        scatterChart.update();
+    } else {
+        // Hide trendline if regression couldn't be calculated (e.g., less than 2 points)
+        scatterChart.data.datasets[1].hidden = true;
+    }
     
     // Create time series chart
     const timeSeriesCtx = document.getElementById('timeSeriesChart').getContext('2d');
@@ -473,4 +504,4 @@ function calculateRegression(xs, ys) {
 }
 </script>
 {% endif %}
-{% endblock %} 
+{% endblock %}
