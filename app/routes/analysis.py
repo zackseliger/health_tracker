@@ -477,60 +477,178 @@ def correlation_table():
                     'full_name': metric_str
                 })
             
+            # Define Oura sleep metrics locally for time shifting logic
+            OURA_SLEEP_METRICS = [
+                'sleep_score', 'rem_sleep', 'deep_sleep', 'light_sleep', 
+                'total_sleep', 'sleep_latency', 'awake_time', 'rem_sleep_score',
+                'deep_sleep_score', 'sleep_efficiency', 'avg_hr', 'avg_hrv',
+                'avg_resp', 'long_hr', 'long_hrv', 'long_resp', 'long_efficiency',
+                'total_sleep_score', 'sleep_latency_score', 'sleep_efficiency_score',
+                'sleep_restfulness_score', 'sleep_timing_score'
+            ]
+
+            # --- Optimization Start ---
+            # 1. Fetch all potentially relevant data once
+            df = analyzer.get_metric_dataframe(start_date, end_date, include_derived=use_density)
+
+            # 2. Prepare metric details and determine actual column names
+            x_metric_details = []
+            for metric_str in x_metrics:
+                source, name = metric_str.split(':', 1)
+                col_name = f"{source}:{name}"
+                # Adjust name if using density and it exists
+                if use_density and source == 'chronometer' and 'energy' not in name and 'calories' not in name:
+                    density_col = f"{source}:density_{name}"
+                    if density_col in df.columns:
+                        col_name = density_col
+                        name = f"density_{name}" # Update name for consistency if needed later
+                
+                x_metric_details.append({
+                    'source': source,
+                    'name': name,
+                    'full_name': metric_str, # Original identifier from form
+                    'col_name': col_name      # Actual column name in DataFrame
+                })
+
             y_metric_details = []
             for metric_str in y_metrics:
                 source, name = metric_str.split(':', 1)
+                col_name = f"{source}:{name}"
+                if use_density and source == 'chronometer' and 'energy' not in name and 'calories' not in name:
+                    density_col = f"{source}:density_{name}"
+                    if density_col in df.columns:
+                        col_name = density_col
+                        name = f"density_{name}"
+                        
                 y_metric_details.append({
                     'source': source,
                     'name': name,
-                    'full_name': metric_str
+                    'full_name': metric_str,
+                    'col_name': col_name
                 })
-            
-            # Calculate correlations
+
+            # 3. Calculate correlations by iterating through pairs
             correlation_matrix = []
             for y_metric in y_metric_details:
                 row = {
-                    'metric': y_metric,
+                    'metric': y_metric, # Use the detailed dict
                     'correlations': []
                 }
                 
                 for x_metric in x_metric_details:
-                    # Skip self-correlation if same metric
+                    corr_result = {} # Initialize result for this pair
+
+                    # Skip self-correlation
                     if y_metric['full_name'] == x_metric['full_name']:
                         corr_result = {
                             'correlation': 1.0,
                             'p_value': 0.0,
                             'significant': True,
-                            'self': True
+                            'self': True,
+                            'valid_pairs': df[y_metric['col_name']].count() if y_metric['col_name'] in df.columns else 0
                         }
                     else:
-                        result = analyzer.calculate_correlation(
-                            x_metric['name'], x_metric['source'],
-                            y_metric['name'], y_metric['source'],
-                            start_date, end_date, method, min_pairs,
-                            False, handle_missing, time_shift, use_density
-                        )
-                        
-                        if 'error' in result:
+                        x_col = x_metric['col_name']
+                        y_col = y_metric['col_name']
+
+                        # Check if columns exist in the DataFrame
+                        if x_col not in df.columns or y_col not in df.columns:
                             corr_result = {
-                                'error': result['error'],
-                                'valid_pairs': result.get('valid_pairs', 0),
+                                'error': f"Metric data not found ({x_col if x_col not in df.columns else y_col})",
+                                'valid_pairs': 0,
                                 'significant': False
                             }
                         else:
-                            corr_result = {
-                                'correlation': result['correlation']['coefficient'],
-                                'p_value': result['correlation']['p_value'],
-                                'interpretation': result['correlation']['interpretation'],
-                                'significant': result['correlation']['p_value'] < pvalue_threshold,
-                                'valid_pairs': result['correlation']['valid_pairs']
-                            }
+                            # Extract series
+                            series_x = df[x_col].copy()
+                            series_y = df[y_col].copy()
+
+                            # Apply time shift if needed
+                            shifted = False
+                            if time_shift_oura:
+                                if x_metric['source'] == 'oura' and x_metric['name'] in OURA_SLEEP_METRICS:
+                                    series_x = series_x.shift(-1)
+                                    shifted = True
+                                if y_metric['source'] == 'oura' and y_metric['name'] in OURA_SLEEP_METRICS:
+                                    series_y = series_y.shift(-1)
+                                    shifted = True
+                            
+                            # Combine into a temporary DataFrame for pairwise analysis
+                            pair_df = pd.DataFrame({'x': series_x, 'y': series_y})
+
+                            # Count valid pairs *before* interpolation/ffill
+                            valid_pair_df = pair_df.dropna()
+                            valid_pairs = len(valid_pair_df)
+
+                            if valid_pairs < min_pairs:
+                                corr_result = {
+                                    'error': f'Insufficient pairs ({valid_pairs} < {min_pairs})',
+                                    'valid_pairs': valid_pairs,
+                                    'significant': False
+                                }
+                            else:
+                                # Select data based on handle_missing strategy for calculation
+                                calc_df = None
+                                if handle_missing == 'drop':
+                                    calc_df = valid_pair_df
+                                elif handle_missing == 'interpolate':
+                                    # Interpolate original pair_df then drop NaNs that might remain at ends
+                                    calc_df = pair_df.interpolate(method='linear').dropna()
+                                elif handle_missing == 'ffill':
+                                    # Forward fill original pair_df then drop NaNs
+                                    calc_df = pair_df.ffill().dropna()
+                                else: # Default to drop
+                                    calc_df = valid_pair_df
+
+                                # Recalculate valid pairs if interpolation/ffill changed the count
+                                final_calc_pairs = len(calc_df)
+                                if final_calc_pairs < min_pairs:
+                                     corr_result = {
+                                        'error': f'Insufficient pairs after {handle_missing} ({final_calc_pairs} < {min_pairs})',
+                                        'valid_pairs': final_calc_pairs,
+                                        'significant': False
+                                    }
+                                else:
+                                    # Calculate correlation
+                                    try:
+                                        if method == 'pearson':
+                                            corr, p_value = stats.pearsonr(calc_df['x'], calc_df['y'])
+                                        elif method == 'spearman':
+                                            corr, p_value = stats.spearmanr(calc_df['x'], calc_df['y'])
+                                        elif method == 'kendall':
+                                            corr, p_value = stats.kendalltau(calc_df['x'], calc_df['y'])
+                                        else:
+                                            raise ValueError(f"Unknown correlation method: {method}")
+                                        
+                                        # Check for NaN results (can happen with constant data)
+                                        if pd.isna(corr) or pd.isna(p_value):
+                                             corr_result = {
+                                                'error': 'Calculation resulted in NaN (constant data?)',
+                                                'valid_pairs': final_calc_pairs,
+                                                'significant': False
+                                            }
+                                        else:
+                                            corr_result = {
+                                                'correlation': float(corr),
+                                                'p_value': float(p_value),
+                                                'significant': float(p_value) < pvalue_threshold,
+                                                'valid_pairs': final_calc_pairs,
+                                                'shifted': shifted,
+                                                'interpretation': analyzer._interpret_correlation(corr, p_value) # Use existing interpretation method
+                                            }
+                                    except Exception as calc_e:
+                                        corr_result = {
+                                            'error': f'Calculation error: {str(calc_e)}',
+                                            'valid_pairs': final_calc_pairs,
+                                            'significant': False
+                                        }
                     
                     row['correlations'].append(corr_result)
                 
                 correlation_matrix.append(row)
-            
-            # Get available metrics for display
+            # --- Optimization End ---
+
+            # Get available metrics for display (using original metric list)
             all_metrics = {f"{metric['source']}:{metric['metric_name']}": metric['display_name'] for metric in metrics}
             
             return render_template('analysis/correlation_table.html', 
@@ -558,4 +676,4 @@ def correlation_table():
     
     return render_template('analysis/correlation_table.html', 
                           sources=sources, 
-                          metrics=metrics) 
+                          metrics=metrics)
