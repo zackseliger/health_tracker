@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Interactive Dashboard - Health Data Tracker{% endblock %}
+{% block title %}Dashboard - Health Data Tracker{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -9,52 +9,17 @@
         margin-bottom: 20px;
         position: relative;
     }
-    
-    .chart-toolbar {
-        position: absolute;
-        top: 0;
-        right: 0;
-        padding: 5px;
-        z-index: 100;
-    }
-    
-    .drag-handle {
-        cursor: move;
-    }
-    
-    .metric-pill {
-        display: inline-block;
-        padding: 3px 8px;
-        margin: 2px;
-        border-radius: 12px;
-        font-size: 0.8rem;
-    }
-    
     .chart-panel {
         box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-        transition: box-shadow 0.3s ease-in-out;
-    }
-    
-    .chart-panel:hover {
-        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        margin-bottom: 2rem;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid my-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Interactive Health Dashboard</h1>
-        <div class="btn-group">
-            <button type="button" class="btn btn-outline-primary" id="addChartBtn">
-                <i class="fas fa-plus-circle me-2"></i>Add Chart
-            </button>
-            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#dashboardSettingsModal">
-                <i class="fas fa-cog me-2"></i>Settings
-            </button>
-        </div>
-    </div>
-    
+<div class="container my-4">
+    <h1 class="mb-4">Health Dashboard</h1>
+
     <div class="row mb-4">
         <div class="col-md-6">
             <div class="card">
@@ -82,148 +47,25 @@
                 </div>
             </div>
         </div>
-        
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header bg-info text-white">
                     <h5 class="mb-0">Dashboard Summary</h5>
                 </div>
                 <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <p><strong>Period:</strong> {{ start_date.strftime('%Y-%m-%d') }} to {{ current_date.strftime('%Y-%m-%d') }}</p>
-                            <p><strong>Available Metrics:</strong> {{ available_metrics|length }}</p>
-                        </div>
-                        <div class="col-md-6">
-                            <p><strong>Data Sources:</strong> {{ metrics_by_source|length }}</p>
-                            <div class="d-flex flex-wrap">
-                                {% for source in metrics_by_source.keys() %}
-                                <span class="badge bg-secondary me-1 mb-1">{{ source }}</span>
-                                {% endfor %}
-                            </div>
-                        </div>
+
+                    <p><strong>Available Metrics:</strong> {{ available_metrics|length }}</p>
+                    <p><strong>Data Sources:</strong> {{ metrics_by_source|length }}</p>
+                    <div class="d-flex flex-wrap">
+                        {% for source in metrics_by_source.keys() %}
+                        <span class="badge bg-secondary me-1 mb-1">{{ source }}</span>
+                        {% endfor %}
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    
-    <div id="chartsContainer" class="charts-container">
-        <!-- Initial chart for comparing multiple metrics -->
-        <div class="row mb-4 chart-panel" id="chart-panel-1">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-primary text-white">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0 drag-handle">
-                                <i class="fas fa-chart-line me-2"></i>
-                                <span class="chart-title">Multiple Metrics Comparison</span>
-                            </h5>
-                            <div class="chart-toolbar">
-                                <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-light add-metric-btn" data-chart-id="1">
-                                        <i class="fas fa-plus"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-light edit-chart-btn" data-chart-id="1">
-                                        <i class="fas fa-pen"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-light delete-chart-btn" data-chart-id="1">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="selected-metrics mb-3" id="selected-metrics-1">
-                            <!-- Selected metrics will be shown here as pills -->
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="chart-1"></canvas>
-                        </div>
-                        <div class="correlation-container mt-3 d-none" id="correlation-1">
-                            <div class="card">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0">Correlation Analysis</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="correlation-loading d-none">
-                                        <div class="spinner-border text-primary" role="status">
-                                            <span class="visually-hidden">Loading...</span>
-                                        </div>
-                                        <span class="ms-2">Calculating correlation...</span>
-                                    </div>
-                                    <div class="correlation-results">
-                                        <p class="correlation-text mb-0"></p>
-                                        <div class="mt-2 small text-muted correlation-details"></div>
-                                    </div>
-                                    <div class="correlation-error d-none text-danger mt-2"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Initial chart for single metric trend analysis -->
-        <div class="row mb-4 chart-panel" id="chart-panel-2">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-success text-white">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0 drag-handle">
-                                <i class="fas fa-chart-area me-2"></i>
-                                <span class="chart-title">Single Metric Trend Analysis</span>
-                            </h5>
-                            <div class="chart-toolbar">
-                                <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-light add-metric-btn" data-chart-id="2">
-                                        <i class="fas fa-plus"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-light edit-chart-btn" data-chart-id="2">
-                                        <i class="fas fa-pen"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-light delete-chart-btn" data-chart-id="2">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="selected-metrics mb-3" id="selected-metrics-2">
-                            <!-- Selected metrics will be shown here as pills -->
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="chart-2"></canvas>
-                        </div>
-                        <div class="correlation-container mt-3 d-none" id="correlation-2">
-                            <div class="card">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0">Correlation Analysis</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="correlation-loading d-none">
-                                        <div class="spinner-border text-primary" role="status">
-                                            <span class="visually-hidden">Loading...</span>
-                                        </div>
-                                        <span class="ms-2">Calculating correlation...</span>
-                                    </div>
-                                    <div class="correlation-results">
-                                        <p class="correlation-text mb-0"></p>
-                                        <div class="mt-2 small text-muted correlation-details"></div>
-                                    </div>
-                                    <div class="correlation-error d-none text-danger mt-2"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
+
     {% if not dashboard_data %}
     <div class="alert alert-info">
         <h4 class="alert-heading">No data available for the selected time period</h4>
@@ -231,957 +73,276 @@
         <a href="{{ url_for('data.import_data') }}" class="btn btn-primary">Import Data</a>
     </div>
     {% endif %}
-</div>
 
-<!-- Add Metric Modal -->
-<div class="modal fade" id="addMetricModal" tabindex="-1" aria-labelledby="addMetricModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="addMetricModalLabel">Add Metrics to Chart</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="currentChartId" value="">
-                
-                <!-- Search box for metrics -->
-                <div class="mb-3">
-                    <label for="metricSearch" class="form-label">Search metrics:</label>
-                    <input type="text" class="form-control" id="metricSearch" placeholder="Type to search metrics...">
-                </div>
-                
-                <!-- Tabs for data sources -->
-                <ul class="nav nav-tabs" id="metricsTabs" role="tablist">
-                    {% for source, metrics in metrics_by_source.items() %}
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link {% if loop.first %}active{% endif %}" 
-                                id="{{ source }}-tab" 
-                                data-bs-toggle="tab" 
-                                data-bs-target="#{{ source }}-metrics" 
-                                type="button" 
-                                role="tab">
-                            {{ source|capitalize }}
-                        </button>
-                    </li>
-                    {% endfor %}
-                </ul>
-                
-                <!-- Tab content -->
-                <div class="tab-content p-3 border border-top-0 rounded-bottom" id="metricsTabContent">
-                    {% for source, metrics in metrics_by_source.items() %}
-                    <div class="tab-pane fade {% if loop.first %}show active{% endif %}" 
-                         id="{{ source }}-metrics" 
-                         role="tabpanel">
-                        
-                        <div class="metric-list">
-                            {% for metric in metrics %}
-                            <div class="form-check metric-item mb-2">
-                                <input class="form-check-input metric-checkbox" 
-                                       type="checkbox" 
-                                       id="metric-{{ source }}-{{ loop.index }}" 
-                                       data-metric-name="{{ metric.metric_name }}" 
-                                       data-source="{{ source }}">
-                                <label class="form-check-label" for="metric-{{ source }}-{{ loop.index }}">
-                                    {{ metric.metric_name }}
-                                    <span class="badge bg-secondary">{{ metric.count }} points</span>
-                                </label>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="addSelectedMetricsBtn">Add Selected Metrics</button>
-            </div>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">Metrics Overview</h4>
+        <div>
+            <label for="main-agg-select" class="me-2">Aggregate by:</label>
+            <select id="main-agg-select" class="form-select d-inline-block w-auto">
+                <option value="day" selected>Day</option>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+                <option value="year">Year</option>
+            </select>
         </div>
     </div>
-</div>
 
-<!-- Edit Chart Modal -->
-<div class="modal fade" id="editChartModal" tabindex="-1" aria-labelledby="editChartModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="editChartModalLabel">Edit Chart</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="editChartId" value="">
-                
-                <div class="mb-3">
-                    <label for="chartTitle" class="form-label">Chart Title</label>
-                    <input type="text" class="form-control" id="chartTitle">
-                </div>
-                
-                <div class="mb-3">
-                    <label for="chartType" class="form-label">Chart Type</label>
-                    <select class="form-select" id="chartType">
-                        <option value="line">Line Chart</option>
-                        <option value="bar">Bar Chart</option>
-                        <option value="scatter">Scatter Plot</option>
-                    </select>
-                </div>
-                
-                <div class="mb-3">
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="showLegend" checked>
-                        <label class="form-check-label" for="showLegend">Show Legend</label>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveChartChangesBtn">Save Changes</button>
-            </div>
-        </div>
+    <div class="row" id="metrics-grid">
+        <!-- Metric cards will be rendered here by JS -->
     </div>
-</div>
 
-<!-- Dashboard Settings Modal -->
-<div class="modal fade" id="dashboardSettingsModal" tabindex="-1" aria-labelledby="dashboardSettingsModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
+    <!-- Modal for expanded metric view -->
+    <div class="modal fade" id="metricDetailModal" tabindex="-1" aria-labelledby="metricDetailModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="dashboardSettingsModalLabel">Dashboard Settings</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label for="chartLayout" class="form-label">Default Chart Layout</label>
-                    <select class="form-select" id="chartLayout">
-                        <option value="stacked">Stacked (Full Width)</option>
-                        <option value="grid">Grid (2x2)</option>
+          <div class="modal-header">
+            <h5 class="modal-title" id="metricDetailModalLabel">Metric Details</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <span id="metric-detail-title" class="fw-bold"></span>
+                    <span id="metric-detail-source" class="badge bg-secondary ms-2"></span>
+                </div>
+                <div>
+                    <label for="detail-agg-select" class="me-2">Aggregate by:</label>
+                    <select id="detail-agg-select" class="form-select d-inline-block w-auto">
+                        <option value="day" selected>Day</option>
+                        <option value="week">Week</option>
+                        <option value="month">Month</option>
+                        <option value="year">Year</option>
                     </select>
                 </div>
-                
-                <div class="card mt-3">
-                    <div class="card-header bg-info text-white">
-                        <h6 class="mb-0">About Correlation Analysis</h6>
-                    </div>
-                    <div class="card-body">
-                        <p>Correlation analysis helps you identify relationships between your health metrics:</p>
-                        <ul class="mb-0">
-                            <li><strong>Multiple metrics:</strong> Shows how two metrics relate to each other</li>
-                            <li><strong>Single metric:</strong> Shows how a metric trends over time</li>
-                            <li><i class="fas fa-star text-warning"></i> = Statistically significant (p &lt; 0.05)</li>
-                            <li><i class="fas fa-star text-warning"></i><i class="fas fa-star text-warning"></i> = Highly significant (p &lt; 0.01)</li>
-                            <li><i class="fas fa-star text-warning"></i><i class="fas fa-star text-warning"></i><i class="fas fa-star text-warning"></i> = Very highly significant (p &lt; 0.001)</li>
-                        </ul>
-                    </div>
-                </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveSettingsBtn">Save Settings</button>
+            <div class="chart-container" style="min-height:350px;">
+                <canvas id="metric-detail-chart"></canvas>
             </div>
+            <div id="metric-detail-extra" class="mt-3"></div>
+          </div>
         </div>
+      </div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<!-- Include Chart.js -->
+<!-- Include Chart.js and Bootstrap Modal dependencies -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Embed dashboard data as JSON to avoid JS lint errors -->
+<script id="dashboard-data" type="application/json">
+{{ dashboard_data|tojson|safe }}
+</script>
 <script>
-    // Initial dashboard data from the server
-    const initialData = {{ dashboard_data|tojson }};
-    const dateRange = "{{ date_range }}";
-    const startDate = "{{ start_date.strftime('%Y-%m-%d') }}";
-    const endDate = "{{ current_date.strftime('%Y-%m-%d') }}";
-    
-    // Store chart instances
-    const charts = {};
-    let chartIdCounter = 3; // Start from 3 since we have 2 initial charts
-    
-    // Initialize the dashboard
-    document.addEventListener('DOMContentLoaded', function() {
-        // Set up initial charts
-        setupInitialCharts();
-        
-        // Set up event listeners
-        setupEventListeners();
-    });
-    
-    function setupInitialCharts() {
-        // Initialize the first chart for multiple metrics comparison
-        const ctx1 = document.getElementById('chart-1').getContext('2d');
-        charts[1] = createChart(ctx1, 'line', 'Multiple Metrics Comparison');
-        
-        // Initialize the second chart for single metric trend
-        const ctx2 = document.getElementById('chart-2').getContext('2d');
-        charts[2] = createChart(ctx2, 'line', 'Single Metric Trend');
-        
-        // Add initial data to charts
-        let chartOneMetrics = 0;
-        let chartTwoMetrics = 0;
-        
-        for (const key in initialData) {
-            const metric = initialData[key];
-            
-            if (chartOneMetrics < 2) { // Add first two metrics to chart 1
-                addMetricToChart(1, metric.name, metric.source, metric.color);
-                chartOneMetrics++;
-            } else if (chartTwoMetrics < 1) { // Add one metric to chart 2
-                addMetricToChart(2, metric.name, metric.source, metric.color);
-                chartTwoMetrics++;
-            }
+/* eslint-disable */
+const initialData = JSON.parse(document.getElementById('dashboard-data').textContent);
+const dateRange = "{{ date_range }}";
+
+function generateColor(str) {
+    // Simple string hash to color
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    let color = '#';
+    for (let i = 0; i < 3; i++) {
+        const value = (hash >> (i * 8)) & 0xFF;
+        color += ('00' + value.toString(16)).substr(-2);
+    }
+    return color;
+}
+
+// Utility: Aggregate data by period
+function aggregateData(data, period) {
+    if (!data || !Array.isArray(data)) return [];
+    if (period === 'day') return data;
+    const grouped = {};
+    data.forEach(d => {
+        const date = new Date(d.date);
+        let key;
+        if (period === 'week') {
+            // ISO week: year-W## (e.g., 2024-W15)
+            const y = date.getFullYear();
+            const w = getISOWeek(date);
+            key = `${y}-W${w}`;
+        } else if (period === 'month') {
+            key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        } else if (period === 'year') {
+            key = `${date.getFullYear()}`;
         }
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(d.value);
+    });
+    // Aggregate (average)
+    return Object.entries(grouped).map(([k, arr]) => ({
+        date: k,
+        value: arr.reduce((a, b) => a + b, 0) / arr.length
+    }));
+}
+function getISOWeek(date) {
+    const tmp = new Date(date.getTime());
+    tmp.setHours(0, 0, 0, 0);
+    tmp.setDate(tmp.getDate() + 4 - (tmp.getDay() || 7));
+    const yearStart = new Date(tmp.getFullYear(), 0, 1);
+    return Math.ceil((((tmp - yearStart) / 86400000) + 1) / 7);
+}
+
+// Limit to 100 most recent entries
+function limitRecent(data, n=100) {
+    if (!data || !Array.isArray(data)) return [];
+    return data.slice(-n);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Render metric cards grid
+    const metricsGrid = document.getElementById('metrics-grid');
+    const mainAggSelect = document.getElementById('main-agg-select');
+    let mainAgg = mainAggSelect.value;
+
+    function renderMetricCards() {
+        metricsGrid.innerHTML = '';
+        let colClass = 'col-12 col-sm-6 col-md-4 col-lg-3 col-xl-3'; // 4-6 per row responsive
+        Object.keys(initialData).forEach((key, idx) => {
+            const metric = initialData[key];
+            // Limit to 100 most recent, aggregate
+            let data = limitRecent(metric.data, 100);
+            data = aggregateData(data, mainAgg);
+
+            const card = document.createElement('div');
+            card.className = colClass + ' mb-4';
+            card.innerHTML = `
+                <div class="card h-100 metric-card" data-metric-key="${key}" style="cursor:pointer;">
+                    <div class="card-body p-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-bold small">${metric.name}</span>
+                            <span class="badge bg-secondary small">${metric.source}</span>
+                        </div>
+                        <div class="chart-container" style="min-height:120px;">
+                            <canvas id="mini-chart-${idx}"></canvas>
+                        </div>
+                    </div>
+                </div>
+            `;
+            metricsGrid.appendChild(card);
+
+            // Render mini chart
+            setTimeout(() => {
+                const ctx = document.getElementById(`mini-chart-${idx}`).getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        datasets: [{
+                            label: metric.name,
+                            data: data.map(d => ({
+                                x: d.date,
+                                y: d.value
+                            })),
+                            borderColor: generateColor(metric.name + metric.source),
+                            backgroundColor: generateColor(metric.name + metric.source) + '33',
+                            borderWidth: 2,
+                            fill: false,
+                            pointRadius: 0,
+                            tension: 0.2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { type: mainAgg === 'day' ? 'time' : 'category', display: false },
+                            y: { display: false }
+                        }
+                    }
+                });
+            }, 0);
+        });
     }
-    
-    function setupEventListeners() {
-        // Add chart button
-        document.getElementById('addChartBtn').addEventListener('click', function() {
-            addNewChart();
-        });
-        
-        // Add metric button click (opens modal)
-        document.querySelectorAll('.add-metric-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const chartId = this.getAttribute('data-chart-id');
-                document.getElementById('currentChartId').value = chartId;
-                const modal = new bootstrap.Modal(document.getElementById('addMetricModal'));
-                modal.show();
-            });
-        });
-        
-        // Edit chart button click (opens modal)
-        document.querySelectorAll('.edit-chart-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const chartId = this.getAttribute('data-chart-id');
-                document.getElementById('editChartId').value = chartId;
-                
-                // Set current values
-                const chartTitle = document.querySelector(`#chart-panel-${chartId} .chart-title`).textContent;
-                document.getElementById('chartTitle').value = chartTitle;
-                
-                // Determine chart type
-                const chartType = charts[chartId].config.type;
-                document.getElementById('chartType').value = chartType;
-                
-                // Show modal
-                const modal = new bootstrap.Modal(document.getElementById('editChartModal'));
-                modal.show();
-            });
-        });
-        
-        // Delete chart button
-        document.querySelectorAll('.delete-chart-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const chartId = this.getAttribute('data-chart-id');
-                if (confirm('Are you sure you want to delete this chart?')) {
-                    deleteChart(chartId);
-                }
-            });
-        });
-        
-        // Add selected metrics button
-        document.getElementById('addSelectedMetricsBtn').addEventListener('click', function() {
-            const chartId = document.getElementById('currentChartId').value;
-            const checkedMetrics = document.querySelectorAll('.metric-checkbox:checked');
-            
-            checkedMetrics.forEach(checkbox => {
-                const metricName = checkbox.getAttribute('data-metric-name');
-                const source = checkbox.getAttribute('data-source');
-                const color = generateColor(metricName);
-                
-                addMetricToChart(chartId, metricName, source, color);
-                checkbox.checked = false;
-            });
-            
-            // Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('addMetricModal'));
-            modal.hide();
-        });
-        
-        // Save chart changes button
-        document.getElementById('saveChartChangesBtn').addEventListener('click', function() {
-            const chartId = document.getElementById('editChartId').value;
-            const chartTitle = document.getElementById('chartTitle').value;
-            const chartType = document.getElementById('chartType').value;
-            const showLegend = document.getElementById('showLegend').checked;
-            
-            updateChartSettings(chartId, chartTitle, chartType, showLegend);
-            
-            // Recalculate correlation when chart type changes
-            updateCorrelation(chartId);
-            
-            // Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('editChartModal'));
-            modal.hide();
-        });
-        
-        // Dashboard settings save button
-        document.getElementById('saveSettingsBtn').addEventListener('click', function() {
-            const layout = document.getElementById('chartLayout').value;
-            
-            // Apply settings
-            applyDashboardSettings(layout);
-            
-            // Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('dashboardSettingsModal'));
-            modal.hide();
-        });
-        
-        // Search metrics functionality
-        document.getElementById('metricSearch').addEventListener('input', function() {
-            const searchText = this.value.toLowerCase();
-            filterMetrics(searchText);
-        });
-        
-        // Date range form
-        document.getElementById('dateRangeForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            // Reload with new date range
-            const dateRange = document.getElementById('date_range').value;
-            window.location.href = `${window.location.pathname}?date_range=${dateRange}`;
-        });
-        
-        // Add tooltip for correlation stars
-        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-        const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
-    }
-    
-    function createChart(ctx, type, title) {
-        return new Chart(ctx, {
-            type: type,
+
+    mainAggSelect.addEventListener('change', function() {
+        mainAgg = this.value;
+        renderMetricCards();
+    });
+
+    renderMetricCards();
+
+    // Modal logic for expanded metric
+    let detailChart = null;
+    let currentMetricKey = null;
+    const metricDetailModal = new bootstrap.Modal(document.getElementById('metricDetailModal'));
+    const detailAggSelect = document.getElementById('detail-agg-select');
+    let detailAgg = detailAggSelect.value;
+
+    metricsGrid.addEventListener('click', function(e) {
+        let card = e.target.closest('.metric-card');
+        if (!card) return;
+        const key = card.getAttribute('data-metric-key');
+        showMetricDetail(key);
+    });
+
+    detailAggSelect.addEventListener('change', function() {
+        detailAgg = this.value;
+        if (currentMetricKey) showMetricDetail(currentMetricKey, false);
+    });
+
+    function showMetricDetail(key, showModal=true) {
+        currentMetricKey = key;
+        const metric = initialData[key];
+        document.getElementById('metric-detail-title').textContent = metric.name;
+        document.getElementById('metric-detail-source').textContent = metric.source;
+        // Limit to 100 most recent, aggregate
+        let data = limitRecent(metric.data, 100);
+        data = aggregateData(data, detailAgg);
+
+        // Render chart
+        if (detailChart) detailChart.destroy();
+        const ctx = document.getElementById('metric-detail-chart').getContext('2d');
+        detailChart = new Chart(ctx, {
+            type: 'line',
             data: {
-                datasets: []
+                datasets: [{
+                    label: metric.name,
+                    data: data.map(d => ({
+                        x: d.date,
+                        y: d.value
+                    })),
+                    borderColor: generateColor(metric.name + metric.source),
+                    backgroundColor: generateColor(metric.name + metric.source) + '33',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.2
+                }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
                 scales: {
-                    x: {
-                        type: 'time',
-                        time: {
-                            unit: 'day'
-                        },
-                        title: {
-                            display: true,
-                            text: 'Date'
-                        }
-                    },
-                    y: {
-                        beginAtZero: false,
-                        title: {
-                            display: true,
-                            text: 'Value'
-                        }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top'
-                    },
-                    title: {
-                        display: true,
-                        text: title
-                    }
+                    x: { type: detailAgg === 'day' ? 'time' : 'category', title: { display: true, text: detailAgg.charAt(0).toUpperCase() + detailAgg.slice(1) } },
+                    y: { beginAtZero: false, title: { display: true, text: 'Value' } }
                 }
             }
         });
-    }
-    
-    function addNewChart() {
-        const chartId = chartIdCounter++;
-        
-        // Create chart panel HTML
-        const chartPanel = document.createElement('div');
-        chartPanel.classList.add('row', 'mb-4', 'chart-panel');
-        chartPanel.id = `chart-panel-${chartId}`;
-        
-        chartPanel.innerHTML = `
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-primary text-white">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0 drag-handle">
-                                <i class="fas fa-chart-line me-2"></i>
-                                <span class="chart-title">Chart ${chartId}</span>
-                            </h5>
-                            <div class="chart-toolbar">
-                                <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-light add-metric-btn" data-chart-id="${chartId}">
-                                        <i class="fas fa-plus"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-light edit-chart-btn" data-chart-id="${chartId}">
-                                        <i class="fas fa-pen"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-light delete-chart-btn" data-chart-id="${chartId}">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="selected-metrics mb-3" id="selected-metrics-${chartId}">
-                            <!-- Selected metrics will be shown here as pills -->
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="chart-${chartId}"></canvas>
-                        </div>
-                        <div class="correlation-container mt-3 d-none" id="correlation-${chartId}">
-                            <div class="card">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0">Correlation Analysis</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="correlation-loading d-none">
-                                        <div class="spinner-border text-primary" role="status">
-                                            <span class="visually-hidden">Loading...</span>
-                                        </div>
-                                        <span class="ms-2">Calculating correlation...</span>
-                                    </div>
-                                    <div class="correlation-results">
-                                        <p class="correlation-text mb-0"></p>
-                                        <div class="mt-2 small text-muted correlation-details"></div>
-                                    </div>
-                                    <div class="correlation-error d-none text-danger mt-2"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+
+        // Show extra details (can be expanded as needed)
+        document.getElementById('metric-detail-extra').innerHTML = `
+            <div><strong>Data points:</strong> ${data.length}</div>
+            <div><strong>Aggregation:</strong> ${detailAgg.charAt(0).toUpperCase() + detailAgg.slice(1)}</div>
         `;
-        
-        // Add to container
-        document.getElementById('chartsContainer').appendChild(chartPanel);
-        
-        // Initialize chart
-        const ctx = document.getElementById(`chart-${chartId}`).getContext('2d');
-        charts[chartId] = createChart(ctx, 'line', `Chart ${chartId}`);
-        
-        // Add event listeners
-        chartPanel.querySelector('.add-metric-btn').addEventListener('click', function() {
-            document.getElementById('currentChartId').value = chartId;
-            const modal = new bootstrap.Modal(document.getElementById('addMetricModal'));
-            modal.show();
-        });
-        
-        chartPanel.querySelector('.edit-chart-btn').addEventListener('click', function() {
-            document.getElementById('editChartId').value = chartId;
-            
-            // Set current values
-            const chartTitle = chartPanel.querySelector('.chart-title').textContent;
-            document.getElementById('chartTitle').value = chartTitle;
-            
-            // Determine chart type
-            const chartType = charts[chartId].config.type;
-            document.getElementById('chartType').value = chartType;
-            
-            // Show modal
-            const modal = new bootstrap.Modal(document.getElementById('editChartModal'));
-            modal.show();
-        });
-        
-        chartPanel.querySelector('.delete-chart-btn').addEventListener('click', function() {
-            if (confirm('Are you sure you want to delete this chart?')) {
-                deleteChart(chartId);
-            }
-        });
+
+        if (showModal) metricDetailModal.show();
     }
-    
-    function addMetricToChart(chartId, metricName, source, color) {
-        // Add visual indicator (pill)
-        const metricPill = document.createElement('span');
-        metricPill.classList.add('metric-pill');
-        metricPill.style.backgroundColor = color;
-        metricPill.style.color = 'white';
-        metricPill.setAttribute('data-metric-name', metricName);
-        metricPill.setAttribute('data-source', source);
-        metricPill.innerHTML = `${metricName} <i class="fas fa-times-circle ms-1" title="Remove"></i>`;
-        
-        document.getElementById(`selected-metrics-${chartId}`).appendChild(metricPill);
-        
-        // Add click handler to remove
-        metricPill.querySelector('i').addEventListener('click', function() {
-            removeMetricFromChart(chartId, metricName, source);
-        });
-        
-        // Fetch data and add to chart
-        fetchMetricData(metricName, source, startDate, endDate)
-            .then(data => {
-                if (data && data.data && data.data.length > 0) {
-                    // Add dataset to chart
-                    const dataset = {
-                        label: `${metricName} (${source})`,
-                        data: data.data.map(d => ({ x: new Date(d.date), y: d.value })),
-                        borderColor: color,
-                        backgroundColor: color + '33', // Add transparency
-                        borderWidth: 2,
-                        fill: charts[chartId].config.type === 'line' ? false : true,
-                        tension: 0.1
-                    };
-                    
-                    charts[chartId].data.datasets.push(dataset);
-                    charts[chartId].update();
-                    
-                    // Update y-axis label with units if available
-                    if (data.units) {
-                        charts[chartId].options.scales.y.title.text = `Value (${data.units})`;
-                        charts[chartId].update();
-                    }
-                } else {
-                    alert(`No data available for ${metricName} from ${source}`);
-                    removeMetricFromChart(chartId, metricName, source);
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching metric data:', error);
-                alert('Error loading metric data. Please try again.');
-                removeMetricFromChart(chartId, metricName, source);
-            });
-        
-        // Update correlation analysis
-        updateCorrelation(chartId);
-    }
-    
-    function updateCorrelation(chartId) {
-        const datasets = charts[chartId].data.datasets;
-        if (datasets.length === 0) {
-            // No metrics, hide correlation container
-            document.getElementById(`correlation-${chartId}`).classList.add('d-none');
-            return;
-        }
-        
-        // Show correlation container and loading state
-        const correlationContainer = document.getElementById(`correlation-${chartId}`);
-        correlationContainer.classList.remove('d-none');
-        
-        const loadingEl = correlationContainer.querySelector('.correlation-loading');
-        const resultsEl = correlationContainer.querySelector('.correlation-results');
-        const errorEl = correlationContainer.querySelector('.correlation-error');
-        
-        loadingEl.classList.remove('d-none');
-        resultsEl.classList.add('d-none');
-        errorEl.classList.add('d-none');
-        
-        // Collect metrics information
-        const metrics = [];
-        datasets.forEach(dataset => {
-            const parts = dataset.label.split(' (');
-            const metricName = parts[0];
-            const source = parts[1].slice(0, -1);  // Remove trailing ')'
-            
-            metrics.push({
-                name: metricName,
-                source: source
-            });
-        });
-        
-        // Calculate correlation via API
-        const requestData = {
-            metrics: metrics,
-            // start_date: startDate,
-            end_date: endDate,
-            handle_missing: 'drop'
-        };
-        
-        fetch('/analysis/api/dashboard-correlation', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestData)
-        })
-        .then(response => response.json())
-        .then(data => {
-            loadingEl.classList.add('d-none');
-            
-            if (data.error) {
-                errorEl.textContent = data.error;
-                errorEl.classList.remove('d-none');
-                return;
-            }
-            
-            resultsEl.classList.remove('d-none');
-            
-            // Format correlation info
-            const coefficient = data.correlation.coefficient.toFixed(2);
-            const pValue = data.correlation.p_value < 0.001 ? 
-                '< 0.001' : data.correlation.p_value.toFixed(3);
-            
-            // Determine significance indicator
-            let significanceIcon = '';
-            if (data.correlation.p_value < 0.001) {
-                significanceIcon = '<i class="fas fa-star text-warning"></i><i class="fas fa-star text-warning"></i><i class="fas fa-star text-warning"></i>';
-            } else if (data.correlation.p_value < 0.01) {
-                significanceIcon = '<i class="fas fa-star text-warning"></i><i class="fas fa-star text-warning"></i>';
-            } else if (data.correlation.p_value < 0.05) {
-                significanceIcon = '<i class="fas fa-star text-warning"></i>';
-            }
-            
-            // Determine strength class
-            let strengthClass = 'text-muted';
-            const corrAbs = Math.abs(coefficient);
-            if (corrAbs >= 0.7) {
-                strengthClass = 'text-success fw-bold';
-            } else if (corrAbs >= 0.5) {
-                strengthClass = 'text-primary fw-bold';
-            } else if (corrAbs >= 0.3) {
-                strengthClass = 'text-info';
-            }
-            
-            // Set correlation text
-            const correlationText = correlationContainer.querySelector('.correlation-text');
-            const correlationDetails = correlationContainer.querySelector('.correlation-details');
-            
-            if (data.is_time_trend) {
-                correlationText.innerHTML = `<strong>${data.metric1.display}</strong> has a <span class="${strengthClass}">${coefficient}</span> correlation with time ${significanceIcon}`;
-                correlationDetails.innerHTML = `p-value: ${pValue} | Data points: ${data.correlation.valid_pairs}<br><em>${data.correlation.interpretation}</em>`;
-                
-                // Keep the existing time series chart
-            } else {
-                correlationText.innerHTML = `<strong>${data.metric1.display}</strong> and <strong>${data.metric2.display}</strong> have a <span class="${strengthClass}">${coefficient}</span> correlation ${significanceIcon}`;
-                
-                if (data.correlation.data_info) {
-                    correlationDetails.innerHTML = `p-value: ${pValue} | Valid pairs: ${data.correlation.valid_pairs} | Missing data: ${data.correlation.data_info.missing_metric1 + data.correlation.data_info.missing_metric2} points<br><em>${data.correlation.interpretation}</em>`;
-                } else {
-                    correlationDetails.innerHTML = `p-value: ${pValue} | Data points: ${data.correlation.valid_pairs}<br><em>${data.correlation.interpretation}</em>`;
-                }
-                
-                // Create a scatter plot with the paired data
-                updateChartToScatterPlot(chartId, data);
-            }
-        })
-        .catch(error => {
-            loadingEl.classList.add('d-none');
-            errorEl.textContent = 'Error calculating correlation: ' + error.message;
-            errorEl.classList.remove('d-none');
-        });
-    }
-    
-    function updateChartToScatterPlot(chartId, correlationData) {
-        // Only proceed if we have paired data
-        if (!correlationData.paired_data || correlationData.paired_data.length === 0) {
-            return;
-        }
-        
-        // Get the chart instance
-        const chart = charts[chartId];
-        
-        // If the chart is not already a scatter plot, convert it
-        if (chart.config.type !== 'scatter') {
-            // Save the current chart title
-            const chartTitle = chart.options.plugins.title.text;
-            
-            // Destroy the current chart
-            chart.destroy();
-            
-            // Create a new canvas
-            const container = document.querySelector(`#chart-panel-${chartId} .chart-container`);
-            const canvas = document.createElement('canvas');
-            canvas.id = `chart-${chartId}`;
-            container.innerHTML = '';
-            container.appendChild(canvas);
-            
-            // Create a new scatter plot
-            const ctx = canvas.getContext('2d');
-            charts[chartId] = new Chart(ctx, {
-                type: 'scatter',
-                data: {
-                    datasets: []
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            title: {
-                                display: true,
-                                text: correlationData.metric1.display
-                            }
-                        },
-                        y: {
-                            title: {
-                                display: true,
-                                text: correlationData.metric2.display
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        title: {
-                            display: true,
-                            text: chartTitle
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const point = correlationData.paired_data[context.dataIndex];
-                                    return [
-                                        `Date: ${point.date}`,
-                                        `${correlationData.metric1.display}: ${point.x}`,
-                                        `${correlationData.metric2.display}: ${point.y}`
-                                    ];
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        } else {
-            // Update axis labels for existing scatter plot
-            chart.options.scales.x.title.text = correlationData.metric1.display;
-            chart.options.scales.y.title.text = correlationData.metric2.display;
-            
-            // Clear existing datasets
-            chart.data.datasets = [];
-        }
-        
-        // Add the paired data as a scatter dataset
-        const color = generateColor(correlationData.metric1.name + correlationData.metric2.name);
-        
-        // Add regression line if correlation is significant
-        let regressionLine = null;
-        if (correlationData.correlation.p_value < 0.05 && correlationData.paired_data.length > 5) {
-            // Calculate simple linear regression
-            const xValues = correlationData.paired_data.map(p => p.x);
-            const yValues = correlationData.paired_data.map(p => p.y);
-            
-            // Calculate means
-            const xMean = xValues.reduce((a, b) => a + b, 0) / xValues.length;
-            const yMean = yValues.reduce((a, b) => a + b, 0) / yValues.length;
-            
-            // Calculate slope and intercept
-            let numerator = 0;
-            let denominator = 0;
-            
-            for (let i = 0; i < xValues.length; i++) {
-                numerator += (xValues[i] - xMean) * (yValues[i] - yMean);
-                denominator += Math.pow(xValues[i] - xMean, 2);
-            }
-            
-            const slope = numerator / denominator;
-            const intercept = yMean - (slope * xMean);
-            
-            // Find min and max x values to draw the line
-            const minX = Math.min(...xValues);
-            const maxX = Math.max(...xValues);
-            
-            // Create regression line points
-            regressionLine = [
-                { x: minX, y: slope * minX + intercept },
-                { x: maxX, y: slope * maxX + intercept }
-            ];
-        }
-        
-        // Add scatter points
-        charts[chartId].data.datasets.push({
-            label: 'Data Points',
-            data: correlationData.paired_data.map(p => ({ x: p.x, y: p.y })),
-            backgroundColor: color + '80',  // Semi-transparent
-            borderColor: color,
-            borderWidth: 1,
-            pointRadius: 5,
-            pointHoverRadius: 7
-        });
-        
-        // Add regression line if available
-        if (regressionLine) {
-            charts[chartId].data.datasets.push({
-                label: 'Regression Line',
-                data: regressionLine,
-                type: 'line',
-                borderColor: color,
-                borderWidth: 2,
-                borderDash: [5, 5],
-                fill: false,
-                pointRadius: 0,
-                pointHoverRadius: 0
-            });
-        }
-        
-        // Update the chart
-        charts[chartId].update();
-    }
-    
-    function removeMetricFromChart(chartId, metricName, source) {
-        // Remove pill
-        const pill = document.querySelector(`#selected-metrics-${chartId} [data-metric-name="${metricName}"][data-source="${source}"]`);
-        if (pill) {
-            pill.remove();
-        }
-        
-        // Remove dataset from chart
-        const datasetIndex = charts[chartId].data.datasets.findIndex(ds => 
-            ds.label === `${metricName} (${source})`
-        );
-        
-        if (datasetIndex !== -1) {
-            charts[chartId].data.datasets.splice(datasetIndex, 1);
-            charts[chartId].update();
-        }
-        
-        // Update correlation analysis
-        updateCorrelation(chartId);
-    }
-    
-    function updateChartSettings(chartId, title, type, showLegend) {
-        // Update title in HTML
-        document.querySelector(`#chart-panel-${chartId} .chart-title`).textContent = title;
-        
-        // Update chart configuration
-        if (charts[chartId].config.type !== type) {
-            // Handle chart type change
-            const datasets = charts[chartId].data.datasets;
-            
-            // Create new chart with the selected type
-            const canvas = document.getElementById(`chart-${chartId}`);
-            canvas.remove();
-            
-            const newCanvas = document.createElement('canvas');
-            newCanvas.id = `chart-${chartId}`;
-            document.querySelector(`#chart-panel-${chartId} .chart-container`).appendChild(newCanvas);
-            
-            const ctx = newCanvas.getContext('2d');
-            charts[chartId] = createChart(ctx, type, title);
-            
-            // Add datasets back
-            charts[chartId].data.datasets = datasets;
-            
-            // Update fill property based on chart type
-            datasets.forEach(ds => {
-                ds.fill = type === 'line' ? false : true;
-            });
-        } else {
-            // Just update the title
-            charts[chartId].options.plugins.title.text = title;
-        }
-        
-        // Update legend display
-        charts[chartId].options.plugins.legend.display = showLegend;
-        
-        // Update chart
-        charts[chartId].update();
-    }
-    
-    function deleteChart(chartId) {
-        // Remove chart panel from DOM
-        const chartPanel = document.getElementById(`chart-panel-${chartId}`);
-        if (chartPanel) {
-            chartPanel.remove();
-        }
-        
-        // Destroy chart instance
-        if (charts[chartId]) {
-            charts[chartId].destroy();
-            delete charts[chartId];
-        }
-    }
-    
-    function applyDashboardSettings(layout) {
-        // Apply layout
-        const container = document.getElementById('chartsContainer');
-        
-        if (layout === 'grid') {
-            // Convert to grid layout
-            container.classList.add('row');
-            document.querySelectorAll('.chart-panel').forEach(panel => {
-                panel.classList.remove('row');
-                panel.classList.add('col-md-6');
-            });
-        } else {
-            // Convert to stacked layout
-            container.classList.remove('row');
-            document.querySelectorAll('.chart-panel').forEach(panel => {
-                panel.classList.add('row');
-                panel.classList.remove('col-md-6');
-            });
-        }
-        
-        // Update all charts
-        for (const id in charts) {
-            charts[id].update();
-        }
-    }
-    
-    function refreshAllCharts() {
-        // For each chart, refresh all its metrics
-        for (const chartId in charts) {
-            const chart = charts[chartId];
-            const datasets = chart.data.datasets;
-            
-            datasets.forEach(dataset => {
-                // Extract metric name and source from label
-                const label = dataset.label;
-                const match = label.match(/(.+) \((.+)\)$/);
-                
-                if (match) {
-                    const metricName = match[1];
-                    const source = match[2];
-                    
-                    // Fetch fresh data
-                    fetchMetricData(metricName, source, startDate, endDate)
-                        .then(data => {
-                            if (data && data.data && data.data.length > 0) {
-                                // Update dataset
-                                dataset.data = data.data.map(d => ({ x: new Date(d.date), y: d.value }));
-                            }
-                            chart.update();
-                        })
-                        .catch(error => {
-                            console.error('Error refreshing data:', error);
-                        });
-                }
-            });
-        }
-    }
-    
-    function fetchMetricData(metricName, source, startDate, endDate) {
-        const url = `/analysis/api/metric_data?metric_name=${encodeURIComponent(metricName)}&source=${encodeURIComponent(source)}&start_date=${startDate}&end_date=${endDate}`;
-        
-        return fetch(url)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    return {
-                        data: data.data,
-                        units: data.units
-                    };
-                } else {
-                    throw new Error(data.message);
-                }
-            });
-    }
-    
-    function filterMetrics(searchText) {
-        document.querySelectorAll('.metric-item').forEach(item => {
-            const metricName = item.querySelector('label').textContent.toLowerCase();
-            
-            if (metricName.includes(searchText)) {
-                item.style.display = '';
-            } else {
-                item.style.display = 'none';
-            }
-        });
-    }
-    
-    function generateColor(str) {
-        // Simple string hash to color
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-            hash = str.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        
-        let color = '#';
-        for (let i = 0; i < 3; i++) {
-            const value = (hash >> (i * 8)) & 0xFF;
-            color += ('00' + value.toString(16)).substr(-2);
-        }
-        
-        return color;
-    }
+
+    // Date range form submit (reload page)
+    document.getElementById('dateRangeForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const dateRange = document.getElementById('date_range').value;
+        window.location.href = `${window.location.pathname}?date_range=${dateRange}`;
+    });
+});
+
+/* eslint-enable */
 </script>
-{% endblock %} 
+{% endblock %}

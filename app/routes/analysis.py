@@ -104,14 +104,11 @@ def dashboard():
     
     # Get date range
     date_range = request.args.get('date_range', '30')
-    end_date = datetime.now().date()
     
     try:
         days = int(date_range)
     except ValueError:
         days = 30
-    
-    start_date = end_date - timedelta(days=days)
     
     # Get sample metrics for initial load (one from each source)
     sample_metrics = []
@@ -124,15 +121,15 @@ def dashboard():
                 'source': metric['source'],
                 'color': f'#{hash(metric["metric_name"]) % 0xffffff:06x}'  # Generate a color based on name
             })
-            visited_sources.add(metric['source'])
-            if len(sample_metrics) >= 3:  # Limit to 3 initial metrics
-                break
+            # visited_sources.add(metric['source'])
+            # if len(sample_metrics) >= 3:  # Limit to 3 initial metrics
+            #     break
     
     # Load data for sample metrics
     dashboard_data = {}
     for metric in sample_metrics:
         data = analyzer.get_metric_data(
-            metric['name'], metric['source'], start_date, end_date
+            metric['name'], metric['source'], limit=days
         )
         
         if data:
@@ -152,9 +149,7 @@ def dashboard():
                           available_metrics=available_metrics,
                           metrics_by_source=metrics_by_source,
                           dashboard_data=dashboard_data,
-                          date_range=date_range,
-                          start_date=start_date,
-                          current_date=end_date)
+                          date_range=date_range)
 
 @analysis_bp.route('/api/metric_data')
 def metric_data():

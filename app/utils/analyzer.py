@@ -34,8 +34,7 @@ class HealthAnalyzer:
         
         return result
     
-    def get_metric_data(self, metric_name, source, start_date=None, end_date=None):
-        """Get data for a specific metric"""
+    def get_metric_data(self, metric_name, source, start_date=None, end_date=None, limit=None):
         query = db.session.query(
             HealthData.date,
             HealthData.metric_value,
@@ -53,9 +52,15 @@ class HealthAnalyzer:
         if end_date:
             query = query.filter(HealthData.date <= end_date)
         
-        query = query.order_by(HealthData.date)
-        
-        return query.all()
+        # Order by most recent first if limiting, else chronological
+        if limit is not None:
+            query = query.order_by(HealthData.date.desc())
+            results = query.limit(limit).all()
+            results = results[::-1]  # reverse to chronological order
+            return results
+        else:
+            query = query.order_by(HealthData.date)
+            return query.all()
     
     def get_metric_dataframe(self, start_date=None, end_date=None, include_derived=False):
         """Get a dataframe of all metrics by date
