@@ -351,22 +351,51 @@ class RouteTestCase(BaseTestCase):
         self.assertIn(b'12500.0', response.data)  # Steps
         self.assertIn(b'Chronometer', response.data)
         self.assertIn(b'2100.0', response.data)  # Calories
+    def test_edit_data_point(self):
+        """Test editing the value of a HealthData record."""
+        self._clear_test_data()
+        # Create test data
+        test_date = date(2023, 4, 1)
+        dt = DataType(source='custom', metric_name='test_metric', metric_units='units')
+        db.session.add(dt)
+        db.session.flush()
+        hd = HealthData(date=test_date, data_type=dt, metric_value=10.0)
+        db.session.add(hd)
+        db.session.commit()
+        # Edit the value
+        response = self.client.post(
+            '/data/edit-data-point',
+            data={'data_id': hd.id, 'metric_value': 42.5},
+            follow_redirects=True
+        )
+        print("DEBUG: Response URL after edit:", response.request.path)
+        print("DEBUG: Response history after edit:", [r.location for r in response.history])
+        self.assertEqual(response.status_code, 200)
+        # Check the value was updated in the database
+        updated = HealthData.query.get(hd.id)
+        self.assertIsNotNone(updated)
+        self.assertEqual(updated.metric_value, 42.5)
+        # Check for success message in response
+        self.assertIn(b'Value updated successfully', response.data)
+        # Check the updated value appears in the page
+        import re
+        self.assertRegex(response.data.decode('utf-8'), r'42\.5([0]+)?([^\d]|$)')
     
     def test_date_view_no_data(self):
         """Test the date view route with no data for the selected date."""
         self._clear_test_data()  # Ensure clean state
-        
+
         # Use a date we know has no data
         test_date = date(2099, 12, 31)
         formatted_date = test_date.strftime('%Y-%m-%d')
-        
+
         # Test the date view route
         response = self.client.get(f'/data/date/{formatted_date}')
         self.assertEqual(response.status_code, 200)
-        
+
         # Verify the page contains a message about no data
         self.assertIn(b'No health data found for December 31, 2099', response.data)
-    
+
     # Tests from test_browse_route.py
     def test_browse_with_calorie_filter(self):
         """Test that browse route correctly filters by calories."""

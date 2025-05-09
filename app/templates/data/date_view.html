@@ -69,22 +69,49 @@
                                 <th>Metric</th>
                                 <th>Value</th>
                                 <th>Units</th>
-                                <th>Notes</th>
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for item in data_points %}
                             <tr>
-                                <td>{{ item.metric_name|replace('_', ' ')|capitalize }}</td>
+                                <td>{{ item.data_type.metric_name|replace('_', ' ')|capitalize }}</td>
                                 <td>
-                                    <strong>{{ item.metric_value }}</strong>
+                                    <form method="post" action="{{ url_for('data.edit_data_point') }}" class="edit-value-form" style="display:inline;">
+                                        <input type="hidden" name="data_id" value="{{ item.id }}">
+                                        <span class="value-display">{{ item.metric_value }}</span>
+                                        <input type="number" step="any" name="metric_value" class="form-control value-input" value="{{ item.metric_value }}" style="display:none; width:100px; display:none;">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary edit-btn">Edit</button>
+                                        <button type="submit" class="btn btn-sm btn-primary save-btn" style="display:none;">Save</button>
+                                    </form>
                                 </td>
-                                <td>{{ item.metric_units }}</td>
-                                <td>{{ item.notes or '' }}</td>
+                                <td>{{ item.data_type.metric_units }}</td>
+                                <td></td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
+                    <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        document.querySelectorAll('.edit-value-form').forEach(function(form) {
+                            const editBtn = form.querySelector('.edit-btn');
+                            const saveBtn = form.querySelector('.save-btn');
+                            const valueDisplay = form.querySelector('.value-display');
+                            const valueInput = form.querySelector('.value-input');
+                            editBtn.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                valueDisplay.style.display = 'none';
+                                valueInput.style.display = 'inline-block';
+                                editBtn.style.display = 'none';
+                                saveBtn.style.display = 'inline-block';
+                                valueInput.focus();
+                            });
+                            form.addEventListener('submit', function() {
+                                valueInput.disabled = false;
+                            });
+                        });
+                    });
+                    </script>
                 </div>
             </div>
         </div>

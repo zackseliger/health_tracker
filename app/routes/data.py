@@ -667,6 +667,33 @@ def date_view(date_str=None):
         prev_date=prev_date.date if prev_date else None,
         today_str=today_str
     )
+@data_bp.route('/edit-data-point', methods=['POST'])
+def edit_data_point():
+    """Edit the value of a HealthData record."""
+    from flask import request, redirect, url_for, flash
+    data_id = request.form.get('data_id')
+    new_value = request.form.get('metric_value')
+    if not data_id or new_value is None:
+        flash('Missing data point ID or value.', 'error')
+        return redirect(request.referrer or url_for('data.index'))
+    try:
+        data_point = HealthData.query.get(int(data_id))
+        if not data_point:
+            flash('Data point not found.', 'error')
+            return redirect(request.referrer or url_for('data.index'))
+        data_point.metric_value = float(new_value)
+        db.session.commit()
+        # Fetch the data point again to ensure date is available
+        refreshed = HealthData.query.get(int(data_id))
+        date_str = refreshed.date.strftime('%Y-%m-%d') if refreshed else None
+        print("DEBUG: edit_data_point redirecting to date_str =", date_str)
+        flash('Value updated successfully.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating value: {str(e)}', 'error')
+        date_str = None
+    # Redirect back to the date view for the correct date
+    return redirect(f"/data/date/{date_str}" if date_str else url_for('data.index'))
 
 @data_bp.route('/data-types', methods=['GET'])
 def data_types():
